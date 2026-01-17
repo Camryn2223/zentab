@@ -22,7 +22,7 @@ export class UIRenderer {
     /**
      * Creates the DOM element for a tab group.
      * @param {Object} group Data
-     * @param {Object} actions { onRestore, onRestoreWin, onDelete, onPin }
+     * @param {Object} actions { onRestore, onRestoreWin, onDelete, onPin, onTabClick }
      * @param {Object} config { showFavicons: boolean }
      */
     static createTabGroupElement(group, actions, config = { showFavicons: true }) {
@@ -41,10 +41,10 @@ export class UIRenderer {
         titleContainer.style.alignItems = 'center';
         titleContainer.style.gap = '10px';
 
-        // Pin Icon (Interactive)
+        // Pin Icon
         const pinBtn = document.createElement('button');
         pinBtn.className = `btn-pin ${group.pinned ? 'active' : ''}`;
-        pinBtn.innerHTML = '📌'; // UTF-8 Pin
+        pinBtn.innerHTML = '📌';
         pinBtn.title = group.pinned ? "Unpin Group" : "Pin Group";
         pinBtn.onclick = () => actions.onPin(group.id);
         titleContainer.appendChild(pinBtn);
@@ -54,7 +54,6 @@ export class UIRenderer {
         titleInput.type = 'text';
         titleInput.className = 'group-title-input input-dark';
         titleInput.value = group.customTitle || `${group.tabs.length} Tabs - ${group.date}`;
-        // Basic styling
         Object.assign(titleInput.style, {
             border: '1px solid transparent',
             background: 'transparent',
@@ -92,14 +91,12 @@ export class UIRenderer {
         btnContainer.style.display = 'flex';
         btnContainer.style.gap = '8px';
 
-        // Restore to New Window
         const restoreWinBtn = document.createElement('button');
         restoreWinBtn.className = 'btn-icon-text';
         restoreWinBtn.innerHTML = '<span>❐</span> Window';
         restoreWinBtn.title = "Restore to new window";
         restoreWinBtn.onclick = () => actions.onRestoreWin(group.id);
 
-        // Restore Here
         const restoreBtn = document.createElement('button');
         restoreBtn.className = 'btn-restore';
         restoreBtn.innerText = 'Restore';
@@ -108,7 +105,6 @@ export class UIRenderer {
         btnContainer.appendChild(restoreWinBtn);
         btnContainer.appendChild(restoreBtn);
 
-        // Delete (Hidden if pinned)
         if (!group.pinned) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn-delete';
@@ -124,13 +120,15 @@ export class UIRenderer {
         const tabList = document.createElement('div');
         tabList.className = 'tab-list';
 
-        group.tabs.forEach(tab => {
+        group.tabs.forEach((tab, index) => {
             const link = document.createElement('a');
             link.className = 'tab-link';
             link.href = tab.url;
+            
+            // Delegate click to controller to handle "Consume on Open" logic
             link.onclick = (e) => {
                 e.preventDefault();
-                browser.tabs.create({ url: tab.url, active: false });
+                actions.onTabClick(group.id, index, tab);
             };
 
             if (config.showFavicons) {

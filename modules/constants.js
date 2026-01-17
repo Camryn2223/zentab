@@ -26,7 +26,9 @@ export const DEFAULTS = {
     TAB_GROUPS: [],
     GENERAL_SETTINGS: {
         showFavicons: true,
-        darkMode: true
+        darkMode: true,
+        autoDeduplicate: false,
+        consumeOnOpen: true
     },
     BACKUP_SETTINGS: {
         enabled: false,

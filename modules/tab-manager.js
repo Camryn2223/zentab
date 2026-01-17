@@ -44,11 +44,17 @@ class TabManager {
             id: Date.now(),
             date: new Date().toLocaleString(),
             tabs: tabs,
-            pinned: false, // Feature #3: Default unpinned
+            pinned: false,
             customTitle: null
         };
 
         await storageService.saveGroup(groupData);
+
+        // Feature: Auto-Deduplicate
+        const settings = await settingsManager.getSettings();
+        if (settings.general.autoDeduplicate) {
+            await this.removeDuplicates();
+        }
     }
 
     async deleteGroup(groupId) {
@@ -59,9 +65,28 @@ class TabManager {
     }
 
     /**
-     * Restore tabs to current window.
-     * Logic: If pinned, keep the group. If not pinned, delete after restore.
+     * Remove a single tab from a group.
+     * If group becomes empty and is not pinned, delete the group.
      */
+    async removeTab(groupId, tabIndex) {
+        const groups = await storageService.getGroups();
+        const group = groups.find(g => Number(g.id) === Number(groupId));
+
+        if (group && group.tabs[tabIndex]) {
+            group.tabs.splice(tabIndex, 1);
+            
+            // Check if group is empty
+            if (group.tabs.length === 0 && !group.pinned) {
+                // Remove the group entirely
+                const newGroups = groups.filter(g => Number(g.id) !== Number(groupId));
+                await storageService.updateGroups(newGroups);
+            } else {
+                // Just save the modified group
+                await storageService.updateGroups(groups);
+            }
+        }
+    }
+
     async restoreGroup(groupId) {
         const groups = await storageService.getGroups();
         const group = groups.find(g => Number(g.id) === Number(groupId));
@@ -78,33 +103,24 @@ class TabManager {
         }
     }
 
-    /**
-     * Feature #4: Restore tabs to a new window.
-     */
     async restoreGroupInNewWindow(groupId) {
         const groups = await storageService.getGroups();
         const group = groups.find(g => Number(g.id) === Number(groupId));
 
         if (group && group.tabs && group.tabs.length > 0) {
-            // Create window with the first tab
             const firstTab = group.tabs[0];
             const win = await browser.windows.create({ url: firstTab.url, focused: true });
 
-            // Open remainder
             for (let i = 1; i < group.tabs.length; i++) {
                 await browser.tabs.create({ windowId: win.id, url: group.tabs[i].url, active: false });
             }
 
-            // Only delete if NOT pinned
             if (!group.pinned) {
                 await this.deleteGroup(groupId);
             }
         }
     }
 
-    /**
-     * Renames a saved tab group
-     */
     async renameGroup(groupId, newTitle) {
         const groups = await storageService.getGroups();
         const groupIndex = groups.findIndex(g => Number(g.id) === Number(groupId));
@@ -115,29 +131,57 @@ class TabManager {
         }
     }
 
-    /**
-     * Feature #3: Toggle Pin Status
-     */
     async togglePin(groupId) {
         const groups = await storageService.getGroups();
         const groupIndex = groups.findIndex(g => Number(g.id) === Number(groupId));
 
         if (groupIndex !== -1) {
-            // Toggle boolean
             groups[groupIndex].pinned = !groups[groupIndex].pinned;
             await storageService.updateGroups(groups);
         }
     }
 
     async clearAll() {
-        // Feature #3 refinement: Clear All should usually respect pins, 
-        // but "Delete Everything" usually implies a wipe. 
-        // For safety, we will ONLY delete unpinned groups.
         const groups = await storageService.getGroups();
         const pinnedGroups = groups.filter(g => g.pinned);
         await storageService.updateGroups(pinnedGroups);
         
-        return pinnedGroups.length; // Return remaining count
+        return pinnedGroups.length; 
+    }
+
+    async removeDuplicates() {
+        const groups = await storageService.getGroups();
+        const seenUrls = new Set();
+        let removedCount = 0;
+
+        // Order logic: Pinned first, then Original Order (Newest first)
+        const orderedIndices = groups.map((g, index) => ({ index, pinned: g.pinned, id: g.id }))
+            .sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1;
+                if (!a.pinned && b.pinned) return 1;
+                return a.index - b.index;
+            });
+        
+        for (const item of orderedIndices) {
+            const group = groups[item.index];
+            const originalLength = group.tabs.length;
+            
+            group.tabs = group.tabs.filter(tab => {
+                const normalizedUrl = tab.url.trim();
+                if (seenUrls.has(normalizedUrl)) {
+                    return false;
+                } else {
+                    seenUrls.add(normalizedUrl);
+                    return true;
+                }
+            });
+
+            removedCount += (originalLength - group.tabs.length);
+        }
+
+        const cleanedGroups = groups.filter(g => g.tabs.length > 0);
+        await storageService.updateGroups(cleanedGroups);
+        return removedCount;
     }
 }
 

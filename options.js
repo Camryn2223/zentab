@@ -50,6 +50,7 @@ async function initGroupList() {
 
     document.getElementById('clear-all').addEventListener('click', handleClearAll);
     document.getElementById('dashboard-search').addEventListener('input', debounce(handleSearch, 300));
+    document.getElementById('btn-dedupe').addEventListener('click', handleDeduplicate);
 }
 
 async function loadAndRenderGroups() {
@@ -58,12 +59,11 @@ async function loadAndRenderGroups() {
     // Sort: Pinned first, then Newest ID first
     allGroups.sort((a, b) => {
         if (!!a.pinned === !!b.pinned) {
-            return b.id - a.id; // Same pin state, sort by date desc
+            return b.id - a.id; 
         }
-        return a.pinned ? -1 : 1; // Pinned comes first
+        return a.pinned ? -1 : 1; 
     });
 
-    // Apply current search filter if exists, otherwise render all
     if (currentSearchTerm) {
         filterAndRender(currentSearchTerm);
     } else {
@@ -102,12 +102,23 @@ async function renderGroups(groupsToRender) {
             onRestore: async (id) => { await tabManager.restoreGroup(id); await loadAndRenderGroups(); },
             onRestoreWin: async (id) => { await tabManager.restoreGroupInNewWindow(id); await loadAndRenderGroups(); },
             onDelete: async (id) => { await tabManager.deleteGroup(id); await loadAndRenderGroups(); },
-            onPin: async (id) => { await tabManager.togglePin(id); await loadAndRenderGroups(); }
+            onPin: async (id) => { await tabManager.togglePin(id); await loadAndRenderGroups(); },
+            // Single Tab Click Handler
+            onTabClick: async (groupId, tabIndex, tab) => {
+                // 1. Open Tab (in background to maintain list context)
+                await browser.tabs.create({ url: tab.url, active: false });
+                
+                // 2. Check setting and remove if enabled
+                if (settings.general.consumeOnOpen) {
+                    await tabManager.removeTab(groupId, tabIndex);
+                    // Re-render to show updated list
+                    await loadAndRenderGroups();
+                }
+            }
         };
 
         const groupEl = UIRenderer.createTabGroupElement(group, actions, { showFavicons: settings.general.showFavicons });
 
-        // Rename event listener
         groupEl.addEventListener('group-rename', async (e) => {
             const { id, newTitle } = e.detail;
             await tabManager.renameGroup(id, newTitle);
@@ -134,6 +145,14 @@ async function handleClearAll() {
     }
 }
 
+async function handleDeduplicate() {
+    if (confirm("Remove duplicate tabs across all groups?\n\nPinned groups and newest items will be kept.")) {
+        const removedCount = await tabManager.removeDuplicates();
+        await loadAndRenderGroups();
+        alert(`Cleanup complete! Removed ${removedCount} duplicates.`);
+    }
+}
+
 async function handleSearch(e) {
     currentSearchTerm = e.target.value.toLowerCase();
     filterAndRender(currentSearchTerm);
@@ -145,12 +164,27 @@ async function initSettingsPane() {
     
     initFilterSettings(settings);
 
+    // Favicon Toggle
     const faviconCheckbox = document.getElementById('setting-favicons');
     faviconCheckbox.checked = settings.general.showFavicons;
-    
     faviconCheckbox.addEventListener('change', async (e) => {
         await settingsManager.updateGeneralSetting('showFavicons', e.target.checked);
         await loadAndRenderGroups(); 
+    });
+
+    // Consume Toggle (Remove on Open)
+    const consumeCheckbox = document.getElementById('setting-consume');
+    consumeCheckbox.checked = settings.general.consumeOnOpen;
+    consumeCheckbox.addEventListener('change', async (e) => {
+        await settingsManager.updateGeneralSetting('consumeOnOpen', e.target.checked);
+        // No need to re-render, takes effect on next click
+    });
+
+    // Auto-Dedupe Toggle
+    const dedupeCheckbox = document.getElementById('setting-dedupe');
+    dedupeCheckbox.checked = settings.general.autoDeduplicate;
+    dedupeCheckbox.addEventListener('change', async (e) => {
+        await settingsManager.updateGeneralSetting('autoDeduplicate', e.target.checked);
     });
 
     initBackupUI(settings.backup);

@@ -28,9 +28,12 @@
     <section id="view-dashboard" class="view-section active">
         <div class="view-header">
             <h1>Your Workspace History</h1>
-            <div style="display:flex; gap: 10px;">
-                <!-- New Search Bar -->
-                <input type="text" id="dashboard-search" class="input-dark" placeholder="Search saved tabs..." style="width: 250px;">
+            <div class="header-actions">
+                <!-- Search Bar -->
+                <input type="text" id="dashboard-search" class="input-dark" placeholder="Search saved tabs...">
+                
+                <!-- Action Buttons -->
+                <button id="btn-dedupe" class="btn-secondary" title="Remove duplicate URLs across all groups">Clean Duplicates</button>
                 <button id="clear-all" class="btn-delete-all">Delete Everything</button>
             </div>
         </div>
@@ -47,14 +50,14 @@
             <!-- Column 1: Domain Filtering -->
             <div class="settings-card">
                 <h3>Domain Filtering</h3>
-                <p>Control which sites are allowed to be saved.</p>
+                <p style="margin-bottom: 20px;">Control which sites are allowed to be saved.</p>
 
                 <div class="control-group">
                     <select id="mode-select" class="mode-select">
                         <option value="blacklist">Blacklist (Block Specific)</option>
                         <option value="whitelist">Whitelist (Allow Specific)</option>
                     </select>
-                    <p id="mode-desc">Only sites NOT in this list will be saved.</p>
+                    <p id="mode-desc" class="setting-hint" style="margin-top:5px;">Only sites NOT in this list will be saved.</p>
                 </div>
 
                 <div class="add-row">
@@ -71,17 +74,47 @@
             <div class="right-col">
 
                 <div class="settings-card">
-                    <h3>General</h3>
-                    <div class="setting-row">
-                        <label for="setting-favicons">Show Favicons</label>
-                        <input type="checkbox" id="setting-favicons">
+                    <h3>General Preferences</h3>
+                    
+                    <!-- Favicons -->
+                    <div class="setting-group">
+                        <div class="setting-row">
+                            <label for="setting-favicons">Show Website Icons</label>
+                            <input type="checkbox" id="setting-favicons">
+                        </div>
+                    </div>
+                    
+                    <div class="divider"></div>
+
+                    <!-- Consume on Open -->
+                    <div class="setting-group">
+                        <div class="setting-row">
+                            <label for="setting-consume">Open and Remove</label>
+                            <input type="checkbox" id="setting-consume">
+                        </div>
+                        <p class="setting-hint">
+                            When you click a link in the dashboard, it will be removed from the saved list immediately.
+                        </p>
+                    </div>
+                    
+                    <div class="divider"></div>
+
+                    <!-- Auto Dedupe -->
+                    <div class="setting-group">
+                        <div class="setting-row">
+                            <label for="setting-dedupe">Auto-remove Duplicates</label>
+                            <input type="checkbox" id="setting-dedupe">
+                        </div>
+                        <p class="setting-hint">
+                            When saving new tabs, automatically remove older copies of the same URL from unpinned groups.
+                        </p>
                     </div>
                 </div>
 
                 <!-- ZenTab Native Backups -->
                 <div class="settings-card">
                     <h3>ZenTab Backup (JSON)</h3>
-                    <p>Full backup including settings and timestamps.</p>
+                    <p class="setting-hint" style="margin-bottom: 15px;">Full backup including settings and timestamps.</p>
 
                     <!-- Manual Actions -->
                     <div class="backup-actions">
@@ -95,16 +128,18 @@
                                 Import Full Backup
                             </button>
                         </div>
-                        <p id="import-status" style="font-size: 0.85em; color: var(--accent-green); display:none;"></p>
+                        <p id="import-status" style="font-size: 0.85em; color: var(--accent-green); display:none; margin-top:5px;"></p>
                     </div>
 
-                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+                    <div class="divider" style="margin: 20px 0;"></div>
 
                     <!-- Automation -->
                     <div class="backup-config">
-                        <div class="setting-row">
-                            <label for="backup-enabled">Auto-save to Downloads folder</label>
-                            <input type="checkbox" id="backup-enabled">
+                        <div class="setting-group">
+                            <div class="setting-row">
+                                <label for="backup-enabled">Auto-save to Downloads</label>
+                                <input type="checkbox" id="backup-enabled">
+                            </div>
                         </div>
 
                         <div id="auto-backup-options" class="auto-options">
@@ -117,7 +152,7 @@
                                     <option value="weeks">Weeks</option>
                                 </select>
                             </div>
-                            <p class="small-hint">
+                            <p class="setting-hint" style="margin-top:8px;">
                                 Backups will be saved to your browser's default download location.
                             </p>
                         </div>
@@ -127,11 +162,11 @@
                 <!-- OneTab / Text Compatibility -->
                 <div class="settings-card">
                     <h3>Import / Export URLs</h3>
-                    <p>OneTab compatible. Copy/Paste a list of URLs (one per line).</p>
+                    <p class="setting-hint" style="margin-bottom: 10px;">OneTab compatible. Copy/Paste a list of URLs (one per line).</p>
 
                     <textarea id="onetab-io" class="input-dark" rows="6" placeholder="https://example.com | Example Title&#10;https://google.com"></textarea>
 
-                    <div class="backup-actions" style="margin-top:10px; display:flex; gap:10px;">
+                    <div class="backup-actions" style="margin-top:15px; display:flex; gap:10px;">
                         <button id="btn-onetab-import" class="btn-secondary" style="background-color: var(--accent-green); color: var(--bg-base); border:none;">
                             Import List
                         </button>
@@ -139,7 +174,7 @@
                             Generate Export List
                         </button>
                     </div>
-                    <p id="onetab-status" style="font-size: 0.85em; color: var(--text-secondary); margin-top:5px;"></p>
+                    <p id="onetab-status" class="setting-hint" style="margin-top:5px;"></p>
                 </div>
 
             </div>
