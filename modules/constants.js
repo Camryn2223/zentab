@@ -23,7 +23,7 @@ export const CM_IDS = {
     SAVE_CURRENT: 'cm-save-current',
     SAVE_SELECTED: 'cm-save-selected',
     SAVE_WORKSPACE: 'cm-save-workspace',
-    SAVE_ALL: 'cm-save-all',
+    SAVE_WINDOW: 'cm-save-window',
     OPEN_DASHBOARD: 'cm-open-dashboard'
 };
 

@@ -6,11 +6,14 @@ import { MESSAGES, BACKUP_CONFIG, CM_IDS, COMMANDS } from './modules/constants.j
 console.log("ZenTab: Background script started.");
 
 // --- INITIALIZATION ---
-browser.runtime.onInstalled.addListener(() => {
-    setupContextMenus();
+browser.runtime.onInstalled.addListener(async () => {
+    await setupContextMenus();
 });
 
-function setupContextMenus() {
+async function setupContextMenus() {
+    // Clear existing to prevent duplicates/errors on reload
+    await browser.contextMenus.removeAll();
+
     // 1. Current Tab
     browser.contextMenus.create({
         id: CM_IDS.SAVE_CURRENT,
@@ -18,7 +21,7 @@ function setupContextMenus() {
         contexts: ["page", "tab"]
     });
 
-    // 2. Selected Tabs (Highlighted)
+    // 2. Selected Tabs (Highlighted/Multi-select)
     browser.contextMenus.create({
         id: CM_IDS.SAVE_SELECTED,
         title: "Send Selected Tabs",
@@ -32,17 +35,17 @@ function setupContextMenus() {
         contexts: ["page", "tab"]
     });
 
-    // 3. Workspace (Visible tabs in current window)
+    // 3. Workspace Tabs (Visible Only - useful if some are hidden/folded)
     browser.contextMenus.create({
         id: CM_IDS.SAVE_WORKSPACE,
-        title: "Send Current Workspace (Visible)",
+        title: "Send Workspace Tabs",
         contexts: ["page", "tab"]
     });
     
-    // 4. All Tabs (In current window)
+    // 4. Window Tabs (All in current window, even if hidden)
     browser.contextMenus.create({
-        id: CM_IDS.SAVE_ALL,
-        title: "Send All Tabs (Window)",
+        id: CM_IDS.SAVE_WINDOW,
+        title: "Send Window Tabs",
         contexts: ["page", "tab"]
     });
 
@@ -53,10 +56,10 @@ function setupContextMenus() {
         contexts: ["page", "tab", "action"]
     });
 
-    // 5. Dashboard
+    // 5. Dashboard Link
     browser.contextMenus.create({
         id: CM_IDS.OPEN_DASHBOARD,
-        title: "Open ZenTab Dashboard",
+        title: "Open Dashboard",
         contexts: ["action", "page", "tab"]
     });
 }
@@ -67,21 +70,29 @@ function setupContextMenus() {
 browser.contextMenus.onClicked.addListener(async (info, tab) => {
     switch (info.menuItemId) {
         case CM_IDS.SAVE_CURRENT:
-            if (tab) executeAction({ idsToClose: [tab.id], tabsToSave: [tab] });
+            if (tab) {
+                // Fix: Validate URL before saving (prevents saving dashboard/popup)
+                const shouldSave = await settingsManager.shouldSaveUrl(tab.url);
+                if (shouldSave) {
+                    await executeAction({ idsToClose: [tab.id], tabsToSave: [tab] });
+                } else {
+                    console.log("ZenTab: blocked saving internal/restricted page.");
+                }
+            }
             break;
             
         case CM_IDS.SAVE_SELECTED:
-            // Query for highlighted tabs in the current window
+            // Query: Current Window + Highlighted
             performQueryAndSave({ currentWindow: true, highlighted: true, pinned: false });
             break;
 
         case CM_IDS.SAVE_WORKSPACE:
-            // Workspace usually implies visible tabs (not hidden by other extensions)
+            // Query: Current Window + Visible (Not hidden)
             performQueryAndSave({ currentWindow: true, hidden: false, pinned: false });
             break;
 
-        case CM_IDS.SAVE_ALL:
-            // Everything in window, regardless of hidden status
+        case CM_IDS.SAVE_WINDOW:
+            // Query: Current Window (Everything)
             performQueryAndSave({ currentWindow: true, pinned: false });
             break;
 

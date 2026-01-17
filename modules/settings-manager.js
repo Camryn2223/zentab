@@ -27,8 +27,18 @@ class SettingsManager {
      * @returns {Promise<boolean>}
      */
     async shouldSaveUrl(url, cachedSettings = null) {
+        if (!url) return false;
+
+        // 1. SELF-PRESERVATION CHECK
+        // Prevent the extension from saving/closing its own dashboard or popup.
+        // browser.runtime.getURL("") returns "moz-extension://<uuid>/"
+        if (url.startsWith(browser.runtime.getURL(""))) {
+            return false;
+        }
+
+        // 2. Hostname extraction
         const hostname = getHostname(url);
-        // Do not save internal, file, or invalid schemes
+        // Do not save internal, file, or invalid schemes (handled by utils.js usually)
         if (!hostname) return false;
 
         const settings = cachedSettings || await this.getSettings();
