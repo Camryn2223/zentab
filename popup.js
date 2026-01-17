@@ -3,58 +3,53 @@ import { settingsManager } from './modules/settings-manager.js';
 import { getHostname } from './modules/utils.js';
 import { MODES, MESSAGES } from './modules/constants.js';
 
-document.addEventListener('DOMContentLoaded', initPopup);
-
 let currentHostname = null;
 
-async function initPopup() {
+document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     await loadInitialState();
-}
+});
 
 function setupEventListeners() {
     // Tab Actions
-    // 1. Workspace (Visible tabs)
+    const bindAction = (id, query) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', () => executeTabAction(query));
+    };
+
     bindAction('send-workspace', { currentWindow: true, hidden: false, pinned: false });
-    // 2. Selected (Highlighted)
     bindAction('send-selected', { currentWindow: true, highlighted: true, pinned: false });
-    // 3. All (Window)
     bindAction('send-all', { currentWindow: true, pinned: false });
 
     // Navigation
-    document.getElementById('open-dashboard').addEventListener('click', () => {
-        browser.tabs.create({ url: "options.html" });
+    const openLink = (url) => {
+        browser.tabs.create({ url });
         window.close();
-    });
+    };
 
-    document.getElementById('btn-settings-icon').addEventListener('click', () => {
-        browser.tabs.create({ url: "options.html#view-settings" });
-        window.close();
-    });
+    document.getElementById('open-dashboard').addEventListener('click', () => openLink("options.html"));
+    document.getElementById('btn-settings-icon').addEventListener('click', () => openLink("options.html#view-settings"));
 
     // Filtering Controls
     document.getElementById('toggle-filter').addEventListener('click', handleToggleFilter);
     document.getElementById('mode-select').addEventListener('change', handleModeChange);
 }
 
-function bindAction(elementId, query) {
-    const el = document.getElementById(elementId);
-    if (el) {
-        el.addEventListener('click', () => executeTabAction(query));
-    }
-}
-
 async function loadInitialState() {
-    const settings = await settingsManager.getSettings();
-    document.getElementById('mode-select').value = settings.mode;
+    try {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        currentHostname = getHostname(tab?.url);
+        
+        const settings = await settingsManager.getSettings();
+        document.getElementById('mode-select').value = settings.mode;
 
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    currentHostname = getHostname(tab?.url);
-
-    if (currentHostname) {
-        renderFilterButton(settings);
-    } else {
-        document.getElementById('toggle-filter').style.display = 'none';
+        if (currentHostname) {
+            renderFilterButton(settings);
+        } else {
+            document.getElementById('toggle-filter').style.display = 'none';
+        }
+    } catch (e) {
+        console.error("Popup init error", e);
     }
 }
 
@@ -63,7 +58,7 @@ async function executeTabAction(query) {
         const result = await tabManager.getTabsForAction(query);
 
         if (result.tabsToSave.length > 0) {
-            // Send to background to save (ensures completion if popup closes)
+            // Hand off to background to ensure completion if popup closes
             await browser.runtime.sendMessage({ 
                 action: MESSAGES.SAVE_TABS, 
                 tabs: result.tabsToSave 
@@ -95,11 +90,13 @@ function renderFilterButton(settings) {
     const { mode, blacklist, whitelist } = settings;
     
     btn.style.display = 'inline-block';
+    // Clean classes
     btn.classList.remove('status-loading', 'bl-add', 'bl-remove', 'wl-add', 'wl-remove');
     
     const list = mode === MODES.BLACKLIST ? blacklist : whitelist;
     const isInList = list.includes(currentHostname);
 
+    // Define UI states
     const states = {
         [MODES.BLACKLIST]: {
             added: { text: `Un-block ${currentHostname}`, cls: 'bl-remove', title: "Allow this site" },

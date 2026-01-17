@@ -14,6 +14,10 @@ A lightweight, privacy-friendly OneTab alternative built for the Zen (Firefox-ba
 - Backup/restore to JSON and OneTab-style import/export
 - Everything is stored locally via `browser.storage.local`
 
+## Build
+1. Run `npx web-ext build`
+2. The zip file is the built extension.
+
 ## Install (Zen/Firefox)
 
 1. Open `about:debugging#/runtime/this-firefox`.

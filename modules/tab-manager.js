@@ -3,6 +3,12 @@ import { settingsManager } from './settings-manager.js';
 
 class TabManager {
 
+    /**
+     * Retrieves tabs matching the query, filters them based on settings,
+     * and prepares them for saving/closing.
+     * @param {Object} queryObj - browser.tabs.query object
+     * @returns {Promise<{tabsToSave: Array, idsToClose: Array}>}
+     */
     async getTabsForAction(queryObj) {
         const tabs = await browser.tabs.query(queryObj);
         if (!tabs.length) return { tabsToSave: [], idsToClose: [] };
@@ -28,19 +34,19 @@ class TabManager {
     }
 
     /**
-     * Persist a list of tabs.
-     * @param {Array} tabsOrGroup - Either an array of tabs OR a full group object (for undo/restore).
+     * Persist a list of tabs as a new group, or restore a deleted group object.
+     * @param {Array|Object} tabsOrGroup - Array of tabs or a full group object (for undo).
      */
     async saveTabGroup(tabsOrGroup) {
         if (!tabsOrGroup) return;
 
         let groupData;
 
-        // Check if we are restoring a full group object (Undo action)
+        // Restore Undo Case: tabsOrGroup is a full group object
         if (!Array.isArray(tabsOrGroup) && tabsOrGroup.id && tabsOrGroup.tabs) {
             groupData = tabsOrGroup;
         } else {
-            // New Save
+            // New Save Case
             if (tabsOrGroup.length === 0) return;
             groupData = {
                 id: Date.now(),
@@ -53,18 +59,23 @@ class TabManager {
 
         await storageService.saveGroup(groupData);
 
-        // Feature: Auto-Deduplicate (only on new saves, typically)
+        // Feature: Auto-Deduplicate (only on new saves via array input)
         const settings = await settingsManager.getSettings();
         if (settings.general.autoDeduplicate && Array.isArray(tabsOrGroup)) {
             await this.removeDuplicates();
         }
+        
+        return groupData;
     }
 
     async deleteGroup(groupId) {
         const groups = await storageService.getGroups();
-        const groupToDelete = groups.find(g => Number(g.id) === Number(groupId));
+        const idToMatch = Number(groupId);
         
-        const newGroups = groups.filter(g => Number(g.id) !== Number(groupId));
+        const groupToDelete = groups.find(g => Number(g.id) === idToMatch);
+        if (!groupToDelete) return null;
+        
+        const newGroups = groups.filter(g => Number(g.id) !== idToMatch);
         await storageService.updateGroups(newGroups);
         
         return groupToDelete; // Return for Undo capability
@@ -72,18 +83,22 @@ class TabManager {
 
     async removeTab(groupId, tabIndex) {
         const groups = await storageService.getGroups();
-        const group = groups.find(g => Number(g.id) === Number(groupId));
+        const idToMatch = Number(groupId);
+        const group = groups.find(g => Number(g.id) === idToMatch);
 
         if (group && group.tabs[tabIndex]) {
             group.tabs.splice(tabIndex, 1);
             
+            // If group is empty and not pinned, delete it
             if (group.tabs.length === 0 && !group.pinned) {
-                const newGroups = groups.filter(g => Number(g.id) !== Number(groupId));
+                const newGroups = groups.filter(g => Number(g.id) !== idToMatch);
                 await storageService.updateGroups(newGroups);
             } else {
                 await storageService.updateGroups(groups);
             }
+            return true;
         }
+        return false;
     }
 
     async restoreGroup(groupId) {
@@ -121,20 +136,20 @@ class TabManager {
 
     async renameGroup(groupId, newTitle) {
         const groups = await storageService.getGroups();
-        const groupIndex = groups.findIndex(g => Number(g.id) === Number(groupId));
+        const group = groups.find(g => Number(g.id) === Number(groupId));
 
-        if (groupIndex !== -1) {
-            groups[groupIndex].customTitle = newTitle;
+        if (group) {
+            group.customTitle = newTitle;
             await storageService.updateGroups(groups);
         }
     }
 
     async togglePin(groupId) {
         const groups = await storageService.getGroups();
-        const groupIndex = groups.findIndex(g => Number(g.id) === Number(groupId));
+        const group = groups.find(g => Number(g.id) === Number(groupId));
 
-        if (groupIndex !== -1) {
-            groups[groupIndex].pinned = !groups[groupIndex].pinned;
+        if (group) {
+            group.pinned = !group.pinned;
             await storageService.updateGroups(groups);
         }
     }
@@ -151,33 +166,77 @@ class TabManager {
         const seenUrls = new Set();
         let removedCount = 0;
 
-        const orderedIndices = groups.map((g, index) => ({ index, pinned: g.pinned, id: g.id }))
-            .sort((a, b) => {
-                if (a.pinned && !b.pinned) return -1;
-                if (!a.pinned && b.pinned) return 1;
-                return a.index - b.index;
-            });
-        
-        for (const item of orderedIndices) {
+        // Sort to prioritize pinned groups
+        const map = groups.map((g, i) => ({ index: i, pinned: g.pinned }));
+        map.sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return a.index - b.index;
+        });
+
+        for (const item of map) {
             const group = groups[item.index];
-            const originalLength = group.tabs.length;
+            const originalLen = group.tabs.length;
             
             group.tabs = group.tabs.filter(tab => {
-                const normalizedUrl = tab.url.trim();
-                if (seenUrls.has(normalizedUrl)) {
-                    return false;
-                } else {
-                    seenUrls.add(normalizedUrl);
-                    return true;
-                }
+                const normalized = tab.url.trim();
+                if (seenUrls.has(normalized)) return false;
+                seenUrls.add(normalized);
+                return true;
             });
 
-            removedCount += (originalLength - group.tabs.length);
+            removedCount += (originalLen - group.tabs.length);
         }
 
-        const cleanedGroups = groups.filter(g => g.tabs.length > 0);
-        await storageService.updateGroups(cleanedGroups);
+        const finalGroups = groups.filter(g => g.tabs.length > 0);
+        await storageService.updateGroups(finalGroups);
         return removedCount;
+    }
+
+    // --- DRAG AND DROP LOGIC ---
+
+    async moveGroup(fromId, toIndex) {
+        const groups = await storageService.getGroups();
+        const fromIndex = groups.findIndex(g => Number(g.id) === Number(fromId));
+        
+        if (fromIndex === -1) return;
+
+        // Move item in array
+        const [movedGroup] = groups.splice(fromIndex, 1);
+        groups.splice(toIndex, 0, movedGroup);
+
+        await storageService.updateGroups(groups);
+    }
+
+    async moveTab(fromGroupId, fromIndex, toGroupId, toIndex) {
+        const groups = await storageService.getGroups();
+        const sourceGroup = groups.find(g => Number(g.id) === Number(fromGroupId));
+        const targetGroup = groups.find(g => Number(g.id) === Number(toGroupId));
+
+        if (!sourceGroup || !targetGroup) return;
+        if (!sourceGroup.tabs[fromIndex]) return;
+
+        // Remove from source
+        const [movedTab] = sourceGroup.tabs.splice(fromIndex, 1);
+
+        // Add to target
+        // If dropping into the same group, adjust index if needed because of the splice above
+        // However, standard splice logic handles this if we are careful with indices.
+        // If source === target and fromIndex < toIndex, the splice shifted subsequent items down.
+        // We will rely on UI logic to provide the *intended* visual index, but usually
+        // DnD logic needs to account for the removed item if same list.
+        // For simplicity here, we assume toIndex is calculated based on the *current* state 
+        // minus the moved item if strictly necessary, but actually standard insert:
+        
+        targetGroup.tabs.splice(toIndex, 0, movedTab);
+
+        // Cleanup empty source group if not pinned and not same group
+        if (sourceGroup.tabs.length === 0 && !sourceGroup.pinned && sourceGroup.id !== targetGroup.id) {
+            const finalGroups = groups.filter(g => g.id !== sourceGroup.id);
+            await storageService.updateGroups(finalGroups);
+        } else {
+            await storageService.updateGroups(groups);
+        }
     }
 }
 

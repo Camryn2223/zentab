@@ -31,14 +31,14 @@ class SettingsManager {
 
         // 1. SELF-PRESERVATION CHECK
         // Prevent the extension from saving/closing its own dashboard or popup.
-        // browser.runtime.getURL("") returns "moz-extension://<uuid>/"
-        if (url.startsWith(browser.runtime.getURL(""))) {
+        const runtimeUrl = browser.runtime.getURL("");
+        if (url.startsWith(runtimeUrl)) {
             return false;
         }
 
         // 2. Hostname extraction
         const hostname = getHostname(url);
-        // Do not save internal, file, or invalid schemes (handled by utils.js usually)
+        // Do not save internal (about:), file://, or invalid schemes
         if (!hostname) return false;
 
         const settings = cachedSettings || await this.getSettings();
@@ -50,7 +50,6 @@ class SettingsManager {
             return whitelist.includes(hostname);
         }
         
-        // Fallback safety
         return true;
     }
 
@@ -83,7 +82,7 @@ class SettingsManager {
     }
 
     async addDomain(domainInput, listType) {
-        // Try to normalize input (e.g., user pastes full url vs just domain)
+        // Normalize input: extract hostname if user pasted a full URL
         const hostname = getHostname(domainInput) || getHostname(`http://${domainInput}`) || domainInput;
         if (!hostname) return;
 

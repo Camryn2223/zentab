@@ -1,203 +1,199 @@
+import { createElement } from './utils.js';
+
+/**
+ * View Layer.
+ * Purely functional DOM generation. 
+ * Relies on Data Attributes for Event Delegation in the Controller.
+ */
 export class UIRenderer {
 
-    static createDomainListItem(domain, onRemove) {
-        const item = document.createElement('div');
-        item.className = 'list-item';
+    /**
+     * Renders a list of groups into a container.
+     */
+    static renderDashboard(container, groups, settings) {
+        container.innerHTML = '';
 
-        const text = document.createElement('span');
-        text.innerText = domain;
-        text.style.wordBreak = 'break-all';
-
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'btn-remove-domain';
-        removeBtn.innerHTML = '&times;';
-        removeBtn.title = "Remove";
-        removeBtn.onclick = () => onRemove(domain);
-
-        item.appendChild(text);
-        item.appendChild(removeBtn);
-        return item;
-    }
-
-    static createTabGroupElement(group, actions, config = { showFavicons: true }) {
-        const groupDiv = document.createElement('div');
-        groupDiv.className = `group ${group.pinned ? 'pinned' : ''}`;
-        groupDiv.dataset.id = group.id;
-
-        // --- Header Section ---
-        const header = document.createElement('div');
-        header.className = 'group-header';
-
-        // 1. Title Area
-        const titleContainer = document.createElement('div');
-        titleContainer.className = 'group-title-container';
-        titleContainer.style.display = 'flex';
-        titleContainer.style.alignItems = 'center';
-        titleContainer.style.gap = '10px';
-
-        // Pin Icon
-        const pinBtn = document.createElement('button');
-        pinBtn.className = `btn-pin ${group.pinned ? 'active' : ''}`;
-        pinBtn.innerHTML = '📌';
-        pinBtn.title = group.pinned ? "Unpin Group" : "Pin Group";
-        pinBtn.onclick = () => actions.onPin(group.id);
-        titleContainer.appendChild(pinBtn);
-
-        // Title Input
-        const titleInput = document.createElement('input');
-        titleInput.type = 'text';
-        titleInput.className = 'group-title-input input-dark';
-        titleInput.value = group.customTitle || `${group.tabs.length} Tabs - ${group.date}`;
-        Object.assign(titleInput.style, {
-            border: '1px solid transparent',
-            background: 'transparent',
-            width: '300px',
-            color: 'var(--text-primary)',
-            fontWeight: group.pinned ? 'bold' : 'normal'
-        });
-
-        const saveTitle = () => {
-            const isDefault = titleInput.value.includes('Tabs -');
-            if (titleInput.value && !isDefault) {
-                titleInput.dispatchEvent(new CustomEvent('group-rename', {
-                    detail: { id: group.id, newTitle: titleInput.value },
-                    bubbles: true
-                }));
-            }
-        };
-
-        titleInput.onfocus = () => {
-            titleInput.style.borderColor = 'var(--accent-blue)';
-            titleInput.style.background = 'var(--bg-base)';
-        };
-        titleInput.onblur = () => {
-            titleInput.style.borderColor = 'transparent';
-            titleInput.style.background = 'transparent';
-            saveTitle();
-        };
-        titleInput.onkeypress = (e) => { if (e.key === 'Enter') titleInput.blur(); };
-
-        titleContainer.appendChild(titleInput);
-        header.appendChild(titleContainer);
-
-        // 2. Action Buttons
-        const btnContainer = document.createElement('div');
-        btnContainer.style.display = 'flex';
-        btnContainer.style.gap = '8px';
-
-        const restoreWinBtn = document.createElement('button');
-        restoreWinBtn.className = 'btn-icon-text';
-        restoreWinBtn.innerHTML = '<span>❐</span> Window';
-        restoreWinBtn.title = "Restore to new window";
-        restoreWinBtn.onclick = () => actions.onRestoreWin(group.id);
-
-        const restoreBtn = document.createElement('button');
-        restoreBtn.className = 'btn-restore';
-        restoreBtn.innerText = 'Restore';
-        restoreBtn.onclick = () => actions.onRestore(group.id);
-
-        btnContainer.appendChild(restoreWinBtn);
-        btnContainer.appendChild(restoreBtn);
-
-        if (!group.pinned) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'btn-delete';
-            deleteBtn.innerText = 'Delete';
-            deleteBtn.onclick = () => actions.onDelete(group.id);
-            btnContainer.appendChild(deleteBtn);
+        if (groups.length === 0) {
+            container.appendChild(createElement('div', { 
+                className: 'empty-msg', 
+                text: 'No tabs found.' 
+            }));
+            return;
         }
 
-        header.appendChild(btnContainer);
-        groupDiv.appendChild(header);
-
-        // --- Tabs List Section ---
-        const tabList = document.createElement('div');
-        tabList.className = 'tab-list';
-
-        group.tabs.forEach((tab, index) => {
-            const link = document.createElement('a');
-            link.className = 'tab-link';
-            link.href = tab.url;
-            
-            link.onclick = (e) => {
-                e.preventDefault();
-                actions.onTabClick(group.id, index, tab);
-            };
-
-            if (config.showFavicons) {
-                const iconContainer = document.createElement('div');
-                Object.assign(iconContainer.style, {
-                    width: '16px', height: '16px', marginRight: '12px',
-                    flexShrink: '0', display: 'flex', 
-                    alignItems: 'center', justifyContent: 'center'
-                });
-
-                if (tab.favIconUrl) {
-                    const img = document.createElement('img');
-                    img.src = tab.favIconUrl;
-                    img.className = 'favicon';
-                    Object.assign(img.style, {
-                        width: '100%', height: '100%', objectFit: 'contain'
-                    });
-                    img.addEventListener('error', () => { img.style.display = 'none'; });
-                    iconContainer.appendChild(img);
-                } else {
-                    iconContainer.style.backgroundColor = '#ccc';
-                    iconContainer.style.borderRadius = '2px';
-                }
-                link.appendChild(iconContainer);
-            }
-
-            const titleSpan = document.createElement('span');
-            titleSpan.className = 'tab-title';
-            titleSpan.innerText = tab.title || tab.url;
-
-            link.appendChild(titleSpan);
-            tabList.appendChild(link);
+        const fragment = document.createDocumentFragment();
+        
+        groups.forEach((group, index) => {
+            fragment.appendChild(this._createTabGroupElement(group, index, settings));
         });
 
+        container.appendChild(fragment);
+    }
+
+    static _createTabGroupElement(group, index, settings) {
+        const groupDiv = createElement('div', {
+            className: `group ${group.pinned ? 'pinned' : ''}`,
+            draggable: 'true', // DnD
+            dataset: { 
+                id: group.id,
+                type: 'group',
+                index: index
+            }
+        });
+
+        groupDiv.appendChild(this._createGroupHeader(group));
+        
+        const tabList = this._createTabList(group, settings);
         groupDiv.appendChild(tabList);
+        
         return groupDiv;
     }
 
-    static updateEmptyState(container, message) {
-        container.innerHTML = `<div class="empty-msg">${message}</div>`;
+    static _createGroupHeader(group) {
+        // Pin Button
+        const pinBtn = createElement('button', {
+            className: `btn-pin ${group.pinned ? 'active' : ''}`,
+            text: '📌', // Changed from html to text
+            title: group.pinned ? "Unpin Group" : "Pin Group",
+            dataset: { action: 'pin', id: group.id }
+        });
+
+        // Title Input
+        const titleInput = createElement('input', {
+            type: 'text',
+            className: 'group-title-input input-dark',
+            value: group.customTitle || `${group.tabs.length} Tabs - ${group.date}`,
+            dataset: { action: 'rename', id: group.id }
+        });
+
+        const titleContainer = createElement('div', { className: 'group-title-container' }, [
+            pinBtn,
+            titleInput
+        ]);
+
+        // Action Buttons
+        const btns = [
+            createElement('button', {
+                className: 'btn-icon-text',
+                // Replaced html string with child nodes
+                title: "Restore to new window",
+                dataset: { action: 'restore-win', id: group.id }
+            }, [
+                createElement('span', { text: '❐' }),
+                ' Window'
+            ]),
+            
+            createElement('button', {
+                className: 'btn-restore',
+                text: 'Restore',
+                dataset: { action: 'restore', id: group.id }
+            })
+        ];
+
+        if (!group.pinned) {
+            btns.push(createElement('button', {
+                className: 'btn-delete',
+                text: 'Delete',
+                dataset: { action: 'delete', id: group.id }
+            }));
+        }
+
+        const btnContainer = createElement('div', { className: 'group-actions-container' }, btns);
+
+        // Header itself is a drag handle for the group, but we rely on the parent div draggable
+        return createElement('div', { className: 'group-header' }, [titleContainer, btnContainer]);
     }
 
-    /**
-     * Shows a toast notification at the bottom of the screen.
-     * @param {string} message 
-     * @param {string|null} actionLabel 
-     * @param {Function|null} onAction 
-     * @param {number} duration 
-     */
+    static _createTabList(group, settings) {
+        // The tab-list is a drop zone for tabs
+        const list = createElement('div', { 
+            className: 'tab-list',
+            dataset: {
+                type: 'tab-list',
+                groupId: group.id
+            }
+        });
+
+        group.tabs.forEach((tab, index) => {
+            const children = [];
+
+            // Favicon
+            if (settings.general.showFavicons) {
+                const iconContent = tab.favIconUrl 
+                    ? createElement('img', { 
+                        src: tab.favIconUrl, 
+                        className: 'favicon',
+                        onError: (e) => { e.target.style.display = 'none'; } 
+                      })
+                    : null;
+                children.push(createElement('div', { className: 'favicon-container' }, iconContent ? [iconContent] : []));
+            }
+
+            // Title
+            children.push(createElement('span', { className: 'tab-title', text: tab.title || tab.url }));
+
+            // Link Wrapper
+            const link = createElement('a', {
+                className: 'tab-link',
+                href: tab.url,
+                draggable: 'true', // DnD
+                dataset: { 
+                    action: 'open-tab', 
+                    id: group.id, 
+                    url: tab.url,
+                    index: index,
+                    type: 'tab' // Important for DnD
+                }
+            }, children);
+
+            list.appendChild(link);
+        });
+
+        return list;
+    }
+
+    static createDomainListItem(domain, mode) {
+        return createElement('div', { className: 'list-item' }, [
+            createElement('span', { text: domain, style: { wordBreak: 'break-all' } }),
+            createElement('button', {
+                className: 'btn-remove-domain',
+                text: '×', // Replaced &times; entity with unicode char
+                title: "Remove",
+                dataset: { action: 'remove-domain', domain: domain, mode: mode }
+            })
+        ]);
+    }
+
+    // --- UTILS ---
+
     static showToast(message, actionLabel = null, onAction = null, duration = 4000) {
         const existing = document.getElementById('zentab-toast');
         if (existing) existing.remove();
 
-        const toast = document.createElement('div');
-        toast.id = 'zentab-toast';
-        toast.className = 'toast-notification';
-        
-        const msgSpan = document.createElement('span');
-        msgSpan.innerText = message;
-        toast.appendChild(msgSpan);
+        const children = [createElement('span', { text: message })];
 
         if (actionLabel && onAction) {
-            const btn = document.createElement('button');
-            btn.className = 'toast-action-btn';
-            btn.innerText = actionLabel;
-            btn.onclick = () => {
-                onAction();
-                toast.remove();
-            };
-            toast.appendChild(btn);
+            children.push(createElement('button', {
+                className: 'toast-action-btn',
+                text: actionLabel,
+                onClick: () => {
+                    onAction();
+                    document.getElementById('zentab-toast')?.remove();
+                }
+            }));
         }
+
+        const toast = createElement('div', {
+            id: 'zentab-toast',
+            className: 'toast-notification'
+        }, children);
 
         document.body.appendChild(toast);
 
-        // Animation
-        setTimeout(() => toast.classList.add('visible'), 10);
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+
         setTimeout(() => {
             toast.classList.remove('visible');
             setTimeout(() => toast.remove(), 300);

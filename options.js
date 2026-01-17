@@ -1,394 +1,350 @@
 import { tabManager } from './modules/tab-manager.js';
 import { settingsManager } from './modules/settings-manager.js';
-import { storageService } from './modules/storage.js';
 import { backupManager } from './modules/backup-manager.js';
 import { UIRenderer } from './modules/ui-renderer.js';
+import { store } from './modules/store.js';
+import { DragManager } from './modules/drag-manager.js'; // NEW
 import { MODES, MESSAGES } from './modules/constants.js';
 import { debounce } from './modules/utils.js';
 
-document.addEventListener('DOMContentLoaded', async () => {
-    initNavigation();
-    await Promise.all([initGroupList(), initSettingsPane()]);
-
-    if (window.location.hash === '#view-settings') {
-        navigateTo('view-settings');
+class OptionsController {
+    constructor() {
+        // Local state only for volatile interactions (undo references)
+        this.lastDeletedGroup = null;
+        this.dragManager = new DragManager();
     }
-});
 
-// --- NAVIGATION ---
-function initNavigation() {
-    const navBtns = document.querySelectorAll('.nav-btn');
+    async init() {
+        this.setupNavigation();
+        this.setupDelegatedListeners();
+        this.setupGlobalInputs();
+        this.setupSettingsListeners();
+        this.setupBackupListeners();
+        
+        // Initialize Store and subscribe UI
+        store.subscribe((state) => this.render(state));
+        await store.init();
 
-    navBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            navigateTo(btn.dataset.target);
-        });
-    });
-}
+        // Initialize Drag and Drop
+        const container = document.getElementById('container');
+        this.dragManager.init(container);
 
-function navigateTo(targetId) {
-    const navBtns = document.querySelectorAll('.nav-btn');
-    const sections = document.querySelectorAll('.view-section');
-
-    navBtns.forEach(b => {
-        b.classList.toggle('active', b.dataset.target === targetId);
-    });
-
-    sections.forEach(s => {
-        const isActive = s.id === targetId;
-        s.style.display = isActive ? 'block' : 'none';
-        s.classList.toggle('active', isActive);
-    });
-}
-
-// --- DASHBOARD (SAVED TABS) ---
-let allGroups = []; 
-let currentSearchTerm = ''; 
-let lastDeletedGroup = null; // For Undo functionality
-
-async function initGroupList() {
-    await loadAndRenderGroups();
-
-    document.getElementById('clear-all').addEventListener('click', handleClearAll);
-    document.getElementById('dashboard-search').addEventListener('input', debounce(handleSearch, 300));
-    document.getElementById('btn-dedupe').addEventListener('click', handleDeduplicate);
-}
-
-async function loadAndRenderGroups() {
-    allGroups = await storageService.getGroups();
-    
-    // Sort: Pinned first, then Newest ID first
-    allGroups.sort((a, b) => {
-        if (!!a.pinned === !!b.pinned) {
-            return b.id - a.id; 
+        // Handle Deep Linking
+        if (window.location.hash === '#view-settings') {
+            this.navigateTo('view-settings');
         }
-        return a.pinned ? -1 : 1; 
-    });
-
-    if (currentSearchTerm) {
-        filterAndRender(currentSearchTerm);
-    } else {
-        renderGroups(allGroups);
-    }
-}
-
-function filterAndRender(term) {
-    const filteredGroups = allGroups.filter(group => {
-        const titleMatch = (group.customTitle || '').toLowerCase().includes(term);
-        const tabMatch = group.tabs.some(tab =>
-            tab.title.toLowerCase().includes(term) ||
-            tab.url.toLowerCase().includes(term)
-        );
-        return titleMatch || tabMatch;
-    });
-    renderGroups(filteredGroups);
-}
-
-async function renderGroups(groupsToRender) {
-    const container = document.getElementById('container');
-    container.innerHTML = '';
-
-    const settings = await settingsManager.getSettings();
-
-    if (groupsToRender.length === 0) {
-        UIRenderer.updateEmptyState(container, 'No tabs found.');
-        return;
     }
 
-    const fragment = document.createDocumentFragment();
+    /**
+     * Core Render Loop: Reacts to Store Changes
+     */
+    render(state) {
+        if (state.loading) return; 
 
-    groupsToRender.forEach(group => {
-        // Actions wrapper
-        const actions = {
-            onRestore: async (id) => { await tabManager.restoreGroup(id); await loadAndRenderGroups(); },
-            onRestoreWin: async (id) => { await tabManager.restoreGroupInNewWindow(id); await loadAndRenderGroups(); },
+        // 1. Dashboard Render
+        const container = document.getElementById('container');
+        const groupsToRender = store.getFilteredGroups();
+        UIRenderer.renderDashboard(container, groupsToRender, state.settings);
+
+        // 2. Settings Render (Sync UI with State)
+        this.updateSettingsUI(state.settings);
+    }
+
+    // --- EVENT DELEGATION ---
+
+    setupDelegatedListeners() {
+        const container = document.getElementById('container');
+
+        // Central Click Handler for Dashboard
+        container.addEventListener('click', async (e) => {
+            // Find closest element with a data-action attribute
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            const action = target.dataset.action;
+            const id = Number(target.dataset.id); // Group ID
             
-            // Modified Delete with Undo
-            onDelete: async (id) => { 
-                lastDeletedGroup = await tabManager.deleteGroup(id);
-                await loadAndRenderGroups();
-                UIRenderer.showToast("Group deleted", "Undo", async () => {
-                    if (lastDeletedGroup) {
-                        await tabManager.saveTabGroup(lastDeletedGroup);
-                        await loadAndRenderGroups();
-                        lastDeletedGroup = null;
+            // Allow default for inputs so they can be focused, but prevent for links/buttons
+            if (target.tagName !== 'INPUT') {
+                e.preventDefault(); 
+            }
+
+            switch (action) {
+                case 'pin':
+                    await store.togglePin(id);
+                    break;
+
+                case 'restore':
+                    await tabManager.restoreGroup(id);
+                    await store.refreshGroups();
+                    break;
+
+                case 'restore-win':
+                    await tabManager.restoreGroupInNewWindow(id);
+                    await store.refreshGroups();
+                    break;
+
+                case 'delete':
+                    this.lastDeletedGroup = await store.deleteGroup(id);
+                    UIRenderer.showToast("Group deleted", "Undo", async () => {
+                        if (this.lastDeletedGroup) {
+                            await store.restoreGroup(this.lastDeletedGroup);
+                            this.lastDeletedGroup = null;
+                        }
+                    });
+                    break;
+
+                case 'open-tab':
+                    // If we are dragging, do not open
+                    if (target.classList.contains('dragging')) return;
+
+                    const url = target.dataset.url;
+                    const index = Number(target.dataset.index);
+                    
+                    await browser.tabs.create({ url, active: false });
+                    
+                    if (store.state.settings.general.consumeOnOpen) {
+                        await store.removeTab(id, index);
                     }
-                });
-            },
-            
-            onPin: async (id) => { await tabManager.togglePin(id); await loadAndRenderGroups(); },
-            
-            // Single Tab Click Handler
-            onTabClick: async (groupId, tabIndex, tab) => {
-                await browser.tabs.create({ url: tab.url, active: false });
-                if (settings.general.consumeOnOpen) {
-                    await tabManager.removeTab(groupId, tabIndex);
-                    await loadAndRenderGroups();
+                    break;
+            }
+        });
+
+        // Event delegation for Group Renaming (Blur/Enter)
+        container.addEventListener('focusout', async (e) => {
+            if (e.target.dataset.action === 'rename') {
+                const id = Number(e.target.dataset.id);
+                const newTitle = e.target.value;
+                const originalTitle = store.state.groups.find(g => g.id === id)?.customTitle;
+                
+                if (newTitle !== originalTitle) {
+                    await store.updateGroupTitle(id, newTitle);
                 }
             }
-        };
-
-        const groupEl = UIRenderer.createTabGroupElement(group, actions, { showFavicons: settings.general.showFavicons });
-
-        groupEl.addEventListener('group-rename', async (e) => {
-            const { id, newTitle } = e.detail;
-            await tabManager.renameGroup(id, newTitle);
-            await loadAndRenderGroups();
         });
 
-        fragment.appendChild(groupEl);
-    });
-
-    container.appendChild(fragment);
-}
-
-async function handleClearAll() {
-    const hasUnpinned = allGroups.some(g => !g.pinned);
-    
-    if (hasUnpinned && confirm("Delete all UNPINNED groups? Pinned groups will be saved.")) {
-        const remaining = await tabManager.clearAll();
-        if(remaining > 0) {
-            UIRenderer.showToast(`Cleared history. ${remaining} pinned groups kept.`);
-        } else {
-            UIRenderer.showToast("History cleared.");
-        }
-        await loadAndRenderGroups();
-    } else if (!hasUnpinned) {
-        alert("Only pinned groups remain. Unpin them to delete.");
-    }
-}
-
-async function handleDeduplicate() {
-    if (confirm("Remove duplicate tabs across all groups?\n\nPinned groups and newest items will be kept.")) {
-        const removedCount = await tabManager.removeDuplicates();
-        await loadAndRenderGroups();
-        UIRenderer.showToast(`Cleanup complete! Removed ${removedCount} duplicates.`);
-    }
-}
-
-async function handleSearch(e) {
-    currentSearchTerm = e.target.value.toLowerCase();
-    filterAndRender(currentSearchTerm);
-}
-
-// --- SETTINGS VIEW ---
-async function initSettingsPane() {
-    const settings = await settingsManager.getSettings();
-    
-    initFilterSettings(settings);
-
-    // Favicon Toggle
-    const faviconCheckbox = document.getElementById('setting-favicons');
-    faviconCheckbox.checked = settings.general.showFavicons;
-    faviconCheckbox.addEventListener('change', async (e) => {
-        await settingsManager.updateGeneralSetting('showFavicons', e.target.checked);
-        await loadAndRenderGroups(); 
-    });
-
-    // Consume Toggle (Remove on Open)
-    const consumeCheckbox = document.getElementById('setting-consume');
-    consumeCheckbox.checked = settings.general.consumeOnOpen;
-    consumeCheckbox.addEventListener('change', async (e) => {
-        await settingsManager.updateGeneralSetting('consumeOnOpen', e.target.checked);
-    });
-
-    // Auto-Dedupe Toggle
-    const dedupeCheckbox = document.getElementById('setting-dedupe');
-    dedupeCheckbox.checked = settings.general.autoDeduplicate;
-    dedupeCheckbox.addEventListener('change', async (e) => {
-        await settingsManager.updateGeneralSetting('autoDeduplicate', e.target.checked);
-    });
-
-    initBackupUI(settings.backup);
-    initOneTabUI();
-}
-
-function initFilterSettings(settings) {
-    const select = document.getElementById('mode-select');
-    select.value = settings.mode;
-    updateDomainUI(settings);
-
-    select.addEventListener('change', async (e) => {
-        await settingsManager.setMode(e.target.value);
-        resetInputs();
-        await refreshSettingsUI();
-    });
-
-    document.getElementById('add-btn').addEventListener('click', handleAddDomain);
-    document.getElementById('add-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleAddDomain();
-    });
-
-    document.getElementById('search-input').addEventListener('input', 
-        debounce(async (e) => {
-            const currentSettings = await settingsManager.getSettings();
-            renderDomainList(currentSettings, e.target.value);
-        }, 300)
-    );
-}
-
-function initOneTabUI() {
-    const textarea = document.getElementById('onetab-io');
-    const status = document.getElementById('onetab-status');
-
-    document.getElementById('btn-onetab-import').addEventListener('click', async () => {
-        const text = textarea.value.trim();
-        const tabs = backupManager.parseOneTabImport(text);
-
-        if (tabs.length > 0) {
-            await tabManager.saveTabGroup(tabs);
-            await loadAndRenderGroups();
-            textarea.value = '';
-            status.innerText = `Successfully imported ${tabs.length} links into a new group!`;
-            status.style.color = "var(--accent-green)";
-        } else {
-            status.innerText = "No valid URLs found in text.";
-            status.style.color = "var(--accent-red)";
-        }
-    });
-
-    document.getElementById('btn-onetab-export').addEventListener('click', async () => {
-        const text = await backupManager.generateOneTabExport();
-        textarea.value = text;
-        status.innerText = "Export list generated. Copy text above.";
-        status.style.color = "var(--text-primary)";
-    });
-}
-
-function initBackupUI(backupSettings) {
-    const enabledCheck = document.getElementById('backup-enabled');
-    const valInput = document.getElementById('backup-val');
-    const unitSelect = document.getElementById('backup-unit');
-    const optionsDiv = document.getElementById('auto-backup-options');
-
-    enabledCheck.checked = backupSettings.enabled;
-    valInput.value = backupSettings.intervalValue;
-    unitSelect.value = backupSettings.intervalUnit;
-    optionsDiv.style.opacity = backupSettings.enabled ? '1' : '0.5';
-    optionsDiv.style.pointerEvents = backupSettings.enabled ? 'auto' : 'none';
-
-    document.getElementById('btn-export-now').addEventListener('click', async () => {
-        try {
-            await browser.runtime.sendMessage({ action: MESSAGES.PERFORM_BACKUP });
-        } catch (error) {
-            console.warn("Background communication failed:", error);
-            alert("Could not start backup. Please reload the extension.");
-        }
-    });
-
-    const fileInput = document.getElementById('import-file');
-    document.getElementById('btn-import-trigger').addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const result = await backupManager.importBackupData(event.target.result);
-                await loadAndRenderGroups();
-                
-                const status = document.getElementById('import-status');
-                status.innerText = `Successfully imported ${result.count} groups!`;
-                status.style.display = 'block';
-                setTimeout(() => status.style.display = 'none', 3000);
-            } catch (err) {
-                alert("Error reading backup file: " + err.message);
+        container.addEventListener('keypress', (e) => {
+            if (e.target.dataset.action === 'rename' && e.key === 'Enter') {
+                e.target.blur(); // Triggers focusout above
             }
-        };
-        reader.readAsText(file);
-    });
+        });
+    }
 
-    const saveConfig = async () => {
-        const val = parseFloat(valInput.value);
-        if (isNaN(val) || val <= 0) return;
+    // --- OTHER LISTENERS ---
 
-        const isEnabled = enabledCheck.checked;
-        optionsDiv.style.opacity = isEnabled ? '1' : '0.5';
-        optionsDiv.style.pointerEvents = isEnabled ? 'auto' : 'none';
+    setupGlobalInputs() {
+        // Search
+        document.getElementById('dashboard-search').addEventListener('input', debounce((e) => {
+            store.setFilter(e.target.value);
+        }, 300));
 
-        await settingsManager.saveBackupConfig({
-            enabled: isEnabled,
-            intervalValue: val,
-            intervalUnit: unitSelect.value
+        // Global Actions
+        document.getElementById('clear-all').addEventListener('click', async () => {
+            const hasUnpinned = store.state.groups.some(g => !g.pinned);
+            if (hasUnpinned && confirm("Delete all UNPINNED groups?")) {
+                const remaining = await tabManager.clearAll();
+                await store.refreshGroups();
+                UIRenderer.showToast(remaining > 0 ? `Cleared history. Kept ${remaining} pinned.` : "History cleared.");
+            }
         });
 
-        try {
-            await browser.runtime.sendMessage({ action: MESSAGES.SCHEDULE_BACKUP });
-        } catch (error) {
-            console.warn("Background script not ready:", error);
+        document.getElementById('btn-dedupe').addEventListener('click', async () => {
+            if (confirm("Remove duplicate tabs? Pinned groups are protected.")) {
+                const count = await tabManager.removeDuplicates();
+                await store.refreshGroups();
+                UIRenderer.showToast(`Cleanup complete! Removed ${count} duplicates.`);
+            }
+        });
+    }
+
+    // --- SETTINGS LOGIC ---
+
+    updateSettingsUI(settings) {
+        // Sync Toggles
+        const setCheck = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = val;
+        };
+
+        setCheck('setting-favicons', settings.general.showFavicons);
+        setCheck('setting-consume', settings.general.consumeOnOpen);
+        setCheck('setting-dedupe', settings.general.autoDeduplicate);
+        
+        // Sync Inputs
+        document.getElementById('mode-select').value = settings.mode;
+        
+        // Backup UI
+        const b = settings.backup;
+        setCheck('backup-enabled', b.enabled);
+        document.getElementById('backup-val').value = b.intervalValue;
+        document.getElementById('backup-unit').value = b.intervalUnit;
+
+        const optionsDiv = document.getElementById('auto-backup-options');
+        if (optionsDiv) {
+            optionsDiv.style.opacity = b.enabled ? '1' : '0.5';
+            optionsDiv.style.pointerEvents = b.enabled ? 'auto' : 'none';
         }
-    };
 
-    enabledCheck.addEventListener('change', saveConfig);
-    valInput.addEventListener('change', saveConfig);
-    unitSelect.addEventListener('change', saveConfig);
-}
-
-// --- HELPER FUNCTIONS ---
-async function refreshSettingsUI() {
-    const settings = await settingsManager.getSettings();
-    updateDomainUI(settings);
-}
-
-function updateDomainUI(settings) {
-    const desc = document.getElementById('mode-desc');
-    const addInput = document.getElementById('add-input');
-    
-    if (settings.mode === MODES.BLACKLIST) {
-        desc.innerText = "Sites in this list will NEVER be saved.";
-        addInput.placeholder = "Block domain (e.g. google.com)";
-    } else {
-        desc.innerText = "ONLY sites in this list will be saved.";
-        addInput.placeholder = "Allow domain (e.g. work.com)";
+        // Render Domains List
+        this.renderDomainList(settings);
     }
 
-    renderDomainList(settings);
-}
+    renderDomainList(settings) {
+        const filterText = document.getElementById('search-input').value.toLowerCase();
+        const listContainer = document.getElementById('domain-list');
+        listContainer.innerHTML = '';
 
-function renderDomainList(settings, filterText = '') {
-    const listContainer = document.getElementById('domain-list');
-    listContainer.innerHTML = '';
+        const isBlacklist = settings.mode === MODES.BLACKLIST;
+        const list = isBlacklist ? settings.blacklist : settings.whitelist;
+        const filtered = list.filter(d => d.toLowerCase().includes(filterText));
 
-    const list = settings.mode === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
-    const filtered = list.filter(domain => domain.toLowerCase().includes(filterText.toLowerCase()));
+        // Setup DOM
+        const fragment = document.createDocumentFragment();
+        if (filtered.length === 0) {
+            UIRenderer.updateEmptyState(listContainer, `No ${settings.mode} domains found.`);
+        } else {
+            filtered.forEach(domain => {
+                const item = UIRenderer.createDomainListItem(domain, settings.mode);
+                fragment.appendChild(item);
+            });
+        }
+        listContainer.appendChild(fragment);
 
-    if (filtered.length === 0) {
-        UIRenderer.updateEmptyState(listContainer, `No ${settings.mode} domains found.`);
-        return;
+        // Describe Text
+        const desc = document.getElementById('mode-desc');
+        const addInput = document.getElementById('add-input');
+        
+        desc.innerText = isBlacklist 
+            ? "Sites in this list will NEVER be saved." 
+            : "ONLY sites in this list will be saved.";
+        addInput.placeholder = isBlacklist 
+            ? "Block domain (e.g. google.com)" 
+            : "Allow domain (e.g. work.com)";
     }
 
-    const fragment = document.createDocumentFragment();
-    filtered.forEach(domain => {
-        const item = UIRenderer.createDomainListItem(domain, async (d) => {
-            await settingsManager.removeDomain(d, settings.mode);
-            await refreshSettingsUI();
+    setupSettingsListeners() {
+        // 1. Toggles
+        const bindToggle = (id, key) => {
+            document.getElementById(id).addEventListener('change', async (e) => {
+                await settingsManager.updateGeneralSetting(key, e.target.checked);
+                await store.refreshSettings(); // Triggers render
+            });
+        };
+        bindToggle('setting-favicons', 'showFavicons');
+        bindToggle('setting-consume', 'consumeOnOpen');
+        bindToggle('setting-dedupe', 'autoDeduplicate');
+
+        // 2. Mode & Filters
+        document.getElementById('mode-select').addEventListener('change', async (e) => {
+            await settingsManager.setMode(e.target.value);
+            await store.refreshSettings();
+        });
+
+        // Filter list delegation
+        document.getElementById('domain-list').addEventListener('click', async (e) => {
+            const target = e.target.closest('[data-action="remove-domain"]');
+            if (target) {
+                await settingsManager.removeDomain(target.dataset.domain, target.dataset.mode);
+                await store.refreshSettings();
+            }
+        });
+
+        const handleAdd = async () => {
+            const input = document.getElementById('add-input');
+            const val = input.value.trim();
+            if (!val) return;
             
-            const searchVal = document.getElementById('search-input').value;
-            if(searchVal) {
-                 const newSettings = await settingsManager.getSettings();
-                 renderDomainList(newSettings, searchVal);
+            await settingsManager.addDomain(val, store.state.settings.mode);
+            input.value = '';
+            await store.refreshSettings();
+        };
+
+        document.getElementById('add-btn').addEventListener('click', handleAdd);
+        document.getElementById('add-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleAdd();
+        });
+        
+        document.getElementById('search-input').addEventListener('input', debounce(() => {
+            // Trigger local re-render of just the list, or full refresh
+            this.renderDomainList(store.state.settings);
+        }, 300));
+    }
+
+    setupBackupListeners() {
+        // Export
+        document.getElementById('btn-export-now').addEventListener('click', async () => {
+            try {
+                await browser.runtime.sendMessage({ action: MESSAGES.PERFORM_BACKUP });
+            } catch (e) { alert("Backup failed. Extension context invalidated?"); }
+        });
+
+        // Import
+        const fileInput = document.getElementById('import-file');
+        document.getElementById('btn-import-trigger').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const res = await backupManager.importBackupData(ev.target.result);
+                    await store.init(); // Full reload
+                    alert(`Imported ${res.count} groups.`);
+                } catch (err) { alert("Invalid backup file."); }
+            };
+            reader.readAsText(file);
+        });
+
+        // Save Config
+        const saveConfig = async () => {
+            await settingsManager.saveBackupConfig({
+                enabled: document.getElementById('backup-enabled').checked,
+                intervalValue: parseFloat(document.getElementById('backup-val').value) || 1,
+                intervalUnit: document.getElementById('backup-unit').value
+            });
+            await store.refreshSettings();
+            browser.runtime.sendMessage({ action: MESSAGES.SCHEDULE_BACKUP }).catch(() => {});
+        };
+
+        ['backup-enabled', 'backup-val', 'backup-unit'].forEach(id => {
+            document.getElementById(id).addEventListener('change', saveConfig);
+        });
+
+        // OneTab Compatibility
+        const area = document.getElementById('onetab-io');
+        document.getElementById('btn-onetab-import').addEventListener('click', async () => {
+            const tabs = backupManager.parseOneTabImport(area.value);
+            if (tabs.length > 0) {
+                await tabManager.saveTabGroup(tabs);
+                await store.refreshGroups();
+                area.value = '';
+                document.getElementById('onetab-status').innerText = `Imported ${tabs.length} links!`;
             }
         });
-        fragment.appendChild(item);
-    });
-    listContainer.appendChild(fragment);
+
+        document.getElementById('btn-onetab-export').addEventListener('click', async () => {
+            area.value = await backupManager.generateOneTabExport();
+        });
+    }
+
+    setupNavigation() {
+        const navBtns = document.querySelectorAll('.nav-btn');
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', () => this.navigateTo(btn.dataset.target));
+        });
+    }
+
+    navigateTo(targetId) {
+        document.querySelectorAll('.nav-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.target === targetId);
+        });
+        document.querySelectorAll('.view-section').forEach(s => {
+            s.style.display = s.id === targetId ? 'block' : 'none';
+        });
+    }
 }
 
-async function handleAddDomain() {
-    const input = document.getElementById('add-input');
-    const rawValue = input.value.trim();
-    if (!rawValue) return;
-
-    const settings = await settingsManager.getSettings();
-    await settingsManager.addDomain(rawValue, settings.mode);
-    
-    input.value = '';
-    await refreshSettingsUI();
-}
-
-function resetInputs() {
-    document.getElementById('add-input').value = '';
-    document.getElementById('search-input').value = '';
-}
+// Start
+document.addEventListener('DOMContentLoaded', () => {
+    new OptionsController().init();
+});
