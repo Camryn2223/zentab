@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ZenTab Dashboard</title>
+  <style>
+    body {
+      background-color: #1e1e2e;
+      color: #cdd6f4;
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 950px;
+      margin: 0 auto;
+      padding: 40px;
+      display: flex;
+      gap: 40px;
+    }
+    
+    .main-col { flex: 3; }
+    .side-col { flex: 1.2; min-width: 250px; }
+
+    h1 { color: #89b4fa; margin-top: 0;}
+    
+    /* Groups */
+    .group {
+      background-color: #313244;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .group-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 15px; border-bottom: 1px solid #45475a; padding-bottom: 10px;
+    }
+    .date { font-size: 0.9em; color: #a6adc8; }
+    .btn-restore { background-color: #a6e3a1; color: #1e1e2e; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    .btn-delete { background-color: #f38ba8; color: #1e1e2e; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+    .tab-link { display: flex; align-items: center; padding: 8px 0; text-decoration: none; color: #cdd6f4; transition: color 0.2s; }
+    .tab-link:hover { color: #89b4fa; }
+    .favicon { width: 16px; height: 16px; margin-right: 10px; border-radius: 2px;}
+
+    /* Sidebar */
+    .settings-box {
+      background-color: #313244;
+      border-radius: 12px;
+      padding: 20px;
+      position: sticky;
+      top: 20px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+
+    h3 { margin: 0 0 5px 0; color: #cba6f7; }
+    p { margin: 0 0 10px 0; font-size: 0.8em; color: #a6adc8; }
+
+    .input-dark {
+      background-color: #1e1e2e; border: 1px solid #45475a; color: #cdd6f4;
+      padding: 8px 12px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;
+    }
+    .input-dark:focus { border-color: #89b4fa; }
+
+    .add-row { display: flex; gap: 5px; margin-bottom: 10px; }
+    .btn-add {
+      background-color: #89b4fa; color: #1e1e2e; border: none;
+      border-radius: 6px; padding: 0 15px; cursor: pointer; font-weight: bold;
+    }
+
+    #domain-list {
+      max-height: 400px; overflow-y: auto; border-top: 1px solid #45475a; margin-top: 5px;
+    }
+    
+    .list-item {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.9em; padding: 8px 0; border-bottom: 1px solid #45475a;
+    }
+    .btn-remove-domain {
+      background: none; border: none; color: #f38ba8; cursor: pointer; font-size: 1.2em;
+    }
+    .empty-msg { color: #6c7086; font-size: 0.9em; font-style: italic; margin-top: 10px; text-align: center;}
+    
+    /* Mode Select */
+    select.mode-select {
+      background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #89b4fa;
+      padding: 8px; border-radius: 6px; width: 100%; cursor: pointer; margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="main-col">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h1>ZenTab</h1>
+      <button id="clear-all" class="btn-delete">Delete Everything</button>
+    </div>
+    <div id="container"></div>
+  </div>
+
+  <div class="side-col">
+    <div class="settings-box">
+      <h3>Filtering Mode</h3>
+      <select id="mode-select" class="mode-select">
+        <option value="blacklist">Blacklist (Block Specific)</option>
+        <option value="whitelist">Whitelist (Allow Specific)</option>
+      </select>
+      
+      <p id="mode-desc">Only sites NOT in this list will be saved.</p>
+      
+      <div class="add-row">
+        <input type="text" id="add-input" class="input-dark" placeholder="example.com">
+        <button id="add-btn" class="btn-add">+</button>
+      </div>
+
+      <input type="text" id="search-input" class="input-dark" placeholder="Search domains...">
+
+      <div id="domain-list"></div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
