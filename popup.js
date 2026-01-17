@@ -1,157 +1,129 @@
+import { storageService } from './modules/storage.js';
+import { FilterService } from './modules/filters.js';
+import { getHostname } from './modules/utils.js';
+import { MODES } from './modules/constants.js';
+
 document.addEventListener('DOMContentLoaded', initPopup);
 
-// --- Send Buttons ---
-document.getElementById('send-workspace').addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ currentWindow: true, hidden: false, pinned: false });
-  await processTabs(tabs);
-});
-
-document.getElementById('send-selected').addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ currentWindow: true, highlighted: true, pinned: false });
-  await processTabs(tabs);
-});
-
-document.getElementById('send-all').addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ currentWindow: true, pinned: false });
-  await processTabs(tabs);
-});
-
-document.getElementById('open-dashboard').addEventListener('click', () => {
-  browser.tabs.create({ url: "options.html" });
-  window.close();
-});
-
-// --- Filter Logic ---
-
-document.getElementById('toggle-filter').addEventListener('click', toggleDomainStatus);
-
-// Listen for Mode Switcher Change
-document.getElementById('mode-select').addEventListener('change', async (e) => {
-  currentMode = e.target.value;
-  await browser.storage.local.set({ filterMode: currentMode });
-  await updateFilterButtonUI(); // Refresh the button text immediately
-});
-
+// --- Initialization ---
 let currentHostname = null;
-let currentMode = 'blacklist';
 
 async function initPopup() {
-  // 1. Get Mode
-  const data = await browser.storage.local.get(['filterMode']);
-  currentMode = data.filterMode || 'blacklist';
-  
-  // Set dropdown value
-  document.getElementById('mode-select').value = currentMode;
+    setupEventListeners();
 
-  // 2. Get Current Tab
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  
-  if (!tab || !tab.url.startsWith('http')) return;
+    // 1. Initialize Mode Select
+    const settings = await storageService.getSettings();
+    document.getElementById('mode-select').value = settings.mode;
 
-  try {
-    currentHostname = new URL(tab.url).hostname;
-    await updateFilterButtonUI();
-  } catch (e) {
-    console.error("Could not parse hostname");
-  }
+    // 2. Identify Current Hostname
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    currentHostname = getHostname(tab?.url);
+
+    if (currentHostname) {
+        await updateFilterButtonUI(settings);
+    }
 }
 
-async function updateFilterButtonUI() {
-  const btn = document.getElementById('toggle-filter');
-  btn.style.display = 'inline-block';
+function setupEventListeners() {
+    document.getElementById('send-workspace').addEventListener('click', () => 
+        handleTabAction({ currentWindow: true, hidden: false, pinned: false }));
+    
+    document.getElementById('send-selected').addEventListener('click', () => 
+        handleTabAction({ currentWindow: true, highlighted: true, pinned: false }));
+    
+    document.getElementById('send-all').addEventListener('click', () => 
+        handleTabAction({ currentWindow: true, pinned: false }));
 
-  const listName = currentMode === 'blacklist' ? 'blacklistedDomains' : 'whitelistedDomains';
-  const data = await browser.storage.local.get(listName);
-  const list = data[listName] || [];
-  const isInList = list.includes(currentHostname);
+    document.getElementById('open-dashboard').addEventListener('click', () => {
+        browser.tabs.create({ url: "options.html" });
+        window.close();
+    });
 
-  if (currentMode === 'blacklist') {
-    // BLACKLIST MODE
-    if (isInList) {
-      btn.innerText = `Un-blacklist ${currentHostname}`;
-      btn.className = 'btn-action-link bl-remove';
-      btn.title = "Allow this site to be saved";
-    } else {
-      btn.innerText = `Blacklist ${currentHostname}`;
-      btn.className = 'btn-action-link bl-add';
-      btn.title = "Never save tabs from this site";
-    }
-  } else {
-    // WHITELIST MODE
-    if (isInList) {
-      btn.innerText = `Un-whitelist ${currentHostname}`;
-      btn.className = 'btn-action-link wl-remove';
-      btn.title = "Stop saving tabs from this site";
-    } else {
-      btn.innerText = `Whitelist ${currentHostname}`;
-      btn.className = 'btn-action-link wl-add';
-      btn.title = "Allow this site to be saved";
-    }
-  }
+    document.getElementById('toggle-filter').addEventListener('click', handleToggleFilter);
+
+    document.getElementById('mode-select').addEventListener('change', async (e) => {
+        await storageService.setMode(e.target.value);
+        const settings = await storageService.getSettings();
+        await updateFilterButtonUI(settings);
+    });
 }
 
-async function toggleDomainStatus() {
-  if (!currentHostname) return;
+// --- Logic ---
 
-  const listName = currentMode === 'blacklist' ? 'blacklistedDomains' : 'whitelistedDomains';
-  const data = await browser.storage.local.get(listName);
-  let list = data[listName] || [];
+async function handleTabAction(queryObj) {
+    const tabs = await browser.tabs.query(queryObj);
+    if (!tabs.length) return;
 
-  if (list.includes(currentHostname)) {
-    list = list.filter(d => d !== currentHostname); // Remove
-  } else {
-    list.push(currentHostname); // Add
-    list.sort();
-  }
+    const settings = await storageService.getSettings();
+    const result = filterTabs(tabs, settings);
 
-  await browser.storage.local.set({ [listName]: list });
-  await updateFilterButtonUI();
-}
-
-// --- Process Tabs ---
-
-async function processTabs(tabs) {
-  if (tabs.length === 0) return;
-
-  // Fetch settings again to ensure we have the absolute latest state
-  const settings = await browser.storage.local.get(['filterMode', 'blacklistedDomains', 'whitelistedDomains']);
-  const mode = settings.filterMode || 'blacklist';
-  const blacklist = settings.blacklistedDomains || [];
-  const whitelist = settings.whitelistedDomains || [];
-
-  const tabsToSave = [];
-  const tabsToCloseIds = [];
-
-  for (const tab of tabs) {
-    try {
-      const hostname = new URL(tab.url).hostname;
-      let shouldSave = false;
-
-      if (mode === 'blacklist') {
-        shouldSave = !blacklist.includes(hostname);
-      } else {
-        shouldSave = whitelist.includes(hostname);
-      }
-
-      if (shouldSave) {
-        tabsToSave.push({
-          title: tab.title,
-          url: tab.url,
-          favIconUrl: tab.favIconUrl
-        });
-        tabsToCloseIds.push(tab.id);
-      }
-    } catch (e) {
-      // Skip internal pages
+    if (result.tabsToSave.length > 0) {
+        await browser.runtime.sendMessage({ action: "saveTabs", tabs: result.tabsToSave });
+        await browser.tabs.remove(result.idsToClose);
     }
-  }
-
-  if (tabsToSave.length === 0) {
     window.close();
-    return;
-  }
+}
 
-  await browser.runtime.sendMessage({ action: "saveTabs", tabs: tabsToSave });
-  await browser.tabs.remove(tabsToCloseIds);
-  window.close();
+function filterTabs(tabs, settings) {
+    const tabsToSave = [];
+    const idsToClose = [];
+
+    for (const tab of tabs) {
+        // Use FilterService to check if we should save
+        if (FilterService.shouldSave(tab.url, settings)) {
+            tabsToSave.push({
+                title: tab.title,
+                url: tab.url,
+                favIconUrl: tab.favIconUrl
+            });
+            idsToClose.push(tab.id);
+        }
+    }
+    return { tabsToSave, idsToClose };
+}
+
+async function handleToggleFilter() {
+    if (!currentHostname) return;
+    const settings = await storageService.getSettings();
+    await FilterService.toggleDomain(currentHostname, settings, storageService);
+    
+    // Refresh UI with new settings
+    const newSettings = await storageService.getSettings();
+    await updateFilterButtonUI(newSettings);
+}
+
+async function updateFilterButtonUI(settings) {
+    const btn = document.getElementById('toggle-filter');
+    btn.style.display = 'inline-block';
+
+    const { mode, blacklist, whitelist } = settings;
+    const list = mode === MODES.BLACKLIST ? blacklist : whitelist;
+    const isInList = list.includes(currentHostname);
+
+    // Update Button State via Helper to keep this clean
+    renderFilterButton(btn, mode, isInList, currentHostname);
+}
+
+function renderFilterButton(btn, mode, isInList, hostname) {
+    if (mode === MODES.BLACKLIST) {
+        if (isInList) {
+            btn.innerText = `Un-blacklist ${hostname}`;
+            btn.className = 'btn-action-link bl-remove';
+            btn.title = "Allow this site to be saved";
+        } else {
+            btn.innerText = `Blacklist ${hostname}`;
+            btn.className = 'btn-action-link bl-add';
+            btn.title = "Never save tabs from this site";
+        }
+    } else {
+        if (isInList) {
+            btn.innerText = `Un-whitelist ${hostname}`;
+            btn.className = 'btn-action-link wl-remove';
+            btn.title = "Stop saving tabs from this site";
+        } else {
+            btn.innerText = `Whitelist ${hostname}`;
+            btn.className = 'btn-action-link wl-add';
+            btn.title = "Allow this site to be saved";
+        }
+    }
 }

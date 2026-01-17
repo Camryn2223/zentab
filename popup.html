@@ -1,80 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <style>
-    body {
-      width: 270px;
-      background-color: #1e1e2e;
-      color: #cdd6f4;
-      font-family: system-ui, -apple-system, sans-serif;
-      padding: 15px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: opacity 0.2s;
-    }
-    button:hover { opacity: 0.9; }
-    
-    .btn-workspace { background-color: #89b4fa; color: #1e1e2e; }
-    .btn-selected { background-color: #cba6f7; color: #1e1e2e; }
-    .btn-all { background-color: #45475a; color: #cdd6f4; }
-    
-    .btn-view {
-      background-color: transparent;
-      border: 1px solid #45475a;
-      color: #a6adc8;
-      margin-bottom: 0;
-    }
-    
-    /* FILTER SECTION */
-    .filter-section {
-      margin-top: 15px;
-      padding-top: 10px;
-      border-top: 1px solid #45475a;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    /* Dropdown Style */
-    select {
-      background-color: #313244;
-      color: #cdd6f4;
-      border: 1px solid #45475a;
-      padding: 5px;
-      border-radius: 6px;
-      width: 100%;
-      outline: none;
-      font-size: 0.9em;
-      cursor: pointer;
-    }
-    
-    /* Link Button Style */
-    .btn-action-link {
-      background: none;
-      text-decoration: underline;
-      padding: 5px;
-      font-size: 0.9em;
-      border: none;
-      width: 100%;
-      text-align: center;
-    }
-    
-    /* Colors for states */
-    .bl-add { color: #f38ba8; } /* Red */
-    .bl-remove { color: #a6e3a1; text-decoration: none; border:1px solid #45475a; border-radius:4px; background:#313244;} 
-
-    .wl-add { color: #a6e3a1; } /* Green */
-    .wl-remove { color: #f38ba8; text-decoration: none; border:1px solid #45475a; border-radius:4px; background:#313244;} 
-
-    h3 { margin-top: 0; text-align: center; margin-bottom: 15px; }
-  </style>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="css/popup.css">
 </head>
 <body>
   <h3>ZenTab</h3>
@@ -86,18 +14,16 @@
   <button id="open-dashboard" class="btn-view">View Saved Tabs</button>
 
   <div class="filter-section">
-    <!-- Mode Switcher -->
     <select id="mode-select">
       <option value="blacklist">Mode: Blacklist (Block Specific)</option>
       <option value="whitelist">Mode: Whitelist (Allow Specific)</option>
     </select>
 
-    <!-- Site Action Button -->
     <button id="toggle-filter" class="btn-action-link" style="display:none">
       Checking site...
     </button>
   </div>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

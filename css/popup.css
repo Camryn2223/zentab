@@ -1,0 +1,62 @@
+@import 'common.css';
+
+body {
+    width: 270px;
+    padding: 15px;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-workspace { background-color: var(--accent-blue); color: var(--bg-base); }
+.btn-selected { background-color: var(--accent-mauve); color: var(--bg-base); }
+.btn-all { background-color: var(--bg-hover); color: var(--text-primary); }
+
+.btn-view {
+    background-color: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    margin-bottom: 0;
+}
+
+/* FILTER SECTION */
+.filter-section {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+select {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    padding: 5px;
+    border-radius: 6px;
+    width: 100%;
+    outline: none;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.btn-action-link {
+    background: none;
+    text-decoration: underline;
+    padding: 5px;
+    font-size: 0.9em;
+    border: none;
+    width: 100%;
+    text-align: center;
+}
+
+.bl-add { color: var(--accent-red); }
+.bl-remove { color: var(--accent-green); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); }
+.wl-add { color: var(--accent-green); }
+.wl-remove { color: var(--accent-red); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); }
+
+h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: var(--text-primary); }
