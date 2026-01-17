@@ -21,10 +21,14 @@ class SettingsManager {
     }
 
     /**
-     * Checks if a specific URL should be saved.
+     * Determines if a URL should be saved based on current filter mode.
+     * @param {string} url 
+     * @param {Object|null} cachedSettings Optional optimization to avoid async lookup
+     * @returns {Promise<boolean>}
      */
     async shouldSaveUrl(url, cachedSettings = null) {
         const hostname = getHostname(url);
+        // Do not save internal, file, or invalid schemes
         if (!hostname) return false;
 
         const settings = cachedSettings || await this.getSettings();
@@ -35,6 +39,8 @@ class SettingsManager {
         } else if (mode === MODES.WHITELIST) {
             return whitelist.includes(hostname);
         }
+        
+        // Fallback safety
         return true;
     }
 
@@ -67,6 +73,7 @@ class SettingsManager {
     }
 
     async addDomain(domainInput, listType) {
+        // Try to normalize input (e.g., user pastes full url vs just domain)
         const hostname = getHostname(domainInput) || getHostname(`http://${domainInput}`) || domainInput;
         if (!hostname) return;
 

@@ -1,26 +1,25 @@
 import { tabManager } from './modules/tab-manager.js';
 import { settingsManager } from './modules/settings-manager.js';
-import { storageService } from './modules/storage.js';
-import { MESSAGES } from './modules/constants.js';
+import { backupManager } from './modules/backup-manager.js';
+import { MESSAGES, BACKUP_CONFIG } from './modules/constants.js';
 
 console.log("ZenTab: Background script started.");
 
+// Open options on toolbar click
 browser.action.onClicked.addListener(() => {
     browser.runtime.openOptionsPage();
 });
 
-const BACKUP_ALARM_NAME = "zentab-auto-backup";
-
 // Alarm Handler (Auto Backup)
 browser.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name === BACKUP_ALARM_NAME) {
+    if (alarm.name === BACKUP_CONFIG.ALARM_NAME) {
         console.log("ZenTab: Alarm triggered backup.");
         await performFileBackup();
     }
 });
 
+// Message Routing
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // We return a Promise chain to keep the channel open and acknowledge receipt
     (async () => {
         try {
             switch (message.action) {
@@ -34,15 +33,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await performFileBackup();
                     break;
             }
-            // Send a success response back to options.js
             sendResponse({ status: "success" });
         } catch (err) {
             console.error("ZenTab: Error in background message handler", err);
             sendResponse({ status: "error", message: err.toString() });
         }
     })();
-
-    return true; // IMPORTANT: Indicates we will send a response asynchronously
+    return true; // Async response
 });
 
 async function handleSaveTabs(tabs) {
@@ -58,17 +55,16 @@ async function scheduleBackupAlarm() {
     const settings = await settingsManager.getSettings();
     const { enabled, intervalValue, intervalUnit } = settings.backup;
 
-    // Clear existing
-    await browser.alarms.clear(BACKUP_ALARM_NAME);
+    await browser.alarms.clear(BACKUP_CONFIG.ALARM_NAME);
 
     if (enabled && intervalValue > 0) {
-        let periodInMinutes = 60; // default 1 hour
+        let periodInMinutes = 60; 
         
         if (intervalUnit === 'hours') periodInMinutes = intervalValue * 60;
         if (intervalUnit === 'days') periodInMinutes = intervalValue * 60 * 24;
         if (intervalUnit === 'weeks') periodInMinutes = intervalValue * 60 * 24 * 7;
 
-        browser.alarms.create(BACKUP_ALARM_NAME, {
+        browser.alarms.create(BACKUP_CONFIG.ALARM_NAME, {
             periodInMinutes: periodInMinutes
         });
         console.log(`ZenTab: Backup scheduled every ${periodInMinutes} minutes.`);
@@ -77,22 +73,16 @@ async function scheduleBackupAlarm() {
     }
 }
 
+/**
+ * Generates and downloads the backup file.
+ * Requires "downloads" permission.
+ */
 async function performFileBackup() {
     try {
         console.log("ZenTab: Performing file backup...");
-        const groups = await storageService.getGroups();
-        const settings = await settingsManager.getSettings();
-
-        const backupData = {
-            version: '1.2.0',
-            exportedAt: new Date().toISOString(),
-            groups: groups,
-            settings: {
-                blacklist: settings.blacklist,
-                whitelist: settings.whitelist,
-                mode: settings.mode
-            }
-        };
+        
+        // Delegate data creation to the manager
+        const backupData = await backupManager.createBackupData();
 
         const jsonStr = JSON.stringify(backupData, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });

@@ -34,3 +34,8 @@ export const DEFAULTS = {
         intervalUnit: 'days',
     }
 };
+
+export const BACKUP_CONFIG = {
+    VERSION: '1.2.0',
+    ALARM_NAME: 'zentab-auto-backup'
+};

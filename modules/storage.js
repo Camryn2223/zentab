@@ -46,18 +46,21 @@ class StorageService {
         await this.set({ [STORAGE_KEYS.TAB_GROUPS]: newGroupsList });
     }
 
+    /**
+     * Imports data into storage.
+     * @param {Object} data Parsed backup data
+     */
     async importData(data) {
-        // Merge imported groups with existing ones, avoiding exact duplicates by ID
+        // 1. Merge Groups (avoid ID collisions)
         const currentGroups = await this.getGroups();
         const existingIds = new Set(currentGroups.map(g => g.id));
         
-        const newGroups = data.groups.filter(g => !existingIds.has(g.id));
-        const combined = [...newGroups, ...currentGroups];
+        const newGroups = (data.groups || []).filter(g => !existingIds.has(g.id));
+        const combinedGroups = [...newGroups, ...currentGroups];
         
-        // Save groups
-        await this.set({ [STORAGE_KEYS.TAB_GROUPS]: combined });
+        await this.set({ [STORAGE_KEYS.TAB_GROUPS]: combinedGroups });
 
-        // Optionally import settings if they exist in the file
+        // 2. Import Settings (Optional overwrite)
         if (data.settings) {
             await this.set({
                 [STORAGE_KEYS.BLACKLIST]: data.settings.blacklist || [],

@@ -1,13 +1,13 @@
 export class UIRenderer {
-    
+
     static createDomainListItem(domain, onRemove) {
         const item = document.createElement('div');
         item.className = 'list-item';
-        
+
         const text = document.createElement('span');
         text.innerText = domain;
         text.style.wordBreak = 'break-all';
-        
+
         const removeBtn = document.createElement('button');
         removeBtn.className = 'btn-remove-domain';
         removeBtn.innerHTML = '&times;';
@@ -20,44 +20,107 @@ export class UIRenderer {
     }
 
     /**
-     * Creates the group element.
+     * Creates the DOM element for a tab group.
      * @param {Object} group Data
-     * @param {Function} onRestore 
-     * @param {Function} onDelete 
+     * @param {Object} actions { onRestore, onRestoreWin, onDelete, onPin }
      * @param {Object} config { showFavicons: boolean }
      */
-    static createTabGroupElement(group, onRestore, onDelete, config = { showFavicons: true }) {
+    static createTabGroupElement(group, actions, config = { showFavicons: true }) {
         const groupDiv = document.createElement('div');
-        groupDiv.className = 'group';
+        groupDiv.className = `group ${group.pinned ? 'pinned' : ''}`;
         groupDiv.dataset.id = group.id;
-        
-        // Header
+
+        // --- Header Section ---
         const header = document.createElement('div');
         header.className = 'group-header';
-        
-        const dateSpan = document.createElement('span');
-        dateSpan.className = 'date';
-        dateSpan.innerText = `${group.tabs.length} Tabs - ${group.date}`;
 
+        // 1. Title Area
+        const titleContainer = document.createElement('div');
+        titleContainer.className = 'group-title-container';
+        titleContainer.style.display = 'flex';
+        titleContainer.style.alignItems = 'center';
+        titleContainer.style.gap = '10px';
+
+        // Pin Icon (Interactive)
+        const pinBtn = document.createElement('button');
+        pinBtn.className = `btn-pin ${group.pinned ? 'active' : ''}`;
+        pinBtn.innerHTML = '📌'; // UTF-8 Pin
+        pinBtn.title = group.pinned ? "Unpin Group" : "Pin Group";
+        pinBtn.onclick = () => actions.onPin(group.id);
+        titleContainer.appendChild(pinBtn);
+
+        // Title Input
+        const titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'group-title-input input-dark';
+        titleInput.value = group.customTitle || `${group.tabs.length} Tabs - ${group.date}`;
+        // Basic styling
+        Object.assign(titleInput.style, {
+            border: '1px solid transparent',
+            background: 'transparent',
+            width: '300px',
+            color: 'var(--text-primary)',
+            fontWeight: group.pinned ? 'bold' : 'normal'
+        });
+
+        const saveTitle = () => {
+            const isDefault = titleInput.value.includes('Tabs -');
+            if (titleInput.value && !isDefault) {
+                titleInput.dispatchEvent(new CustomEvent('group-rename', {
+                    detail: { id: group.id, newTitle: titleInput.value },
+                    bubbles: true
+                }));
+            }
+        };
+
+        titleInput.onfocus = () => {
+            titleInput.style.borderColor = 'var(--accent-blue)';
+            titleInput.style.background = 'var(--bg-base)';
+        };
+        titleInput.onblur = () => {
+            titleInput.style.borderColor = 'transparent';
+            titleInput.style.background = 'transparent';
+            saveTitle();
+        };
+        titleInput.onkeypress = (e) => { if (e.key === 'Enter') titleInput.blur(); };
+
+        titleContainer.appendChild(titleInput);
+        header.appendChild(titleContainer);
+
+        // 2. Action Buttons
         const btnContainer = document.createElement('div');
-        
+        btnContainer.style.display = 'flex';
+        btnContainer.style.gap = '8px';
+
+        // Restore to New Window
+        const restoreWinBtn = document.createElement('button');
+        restoreWinBtn.className = 'btn-icon-text';
+        restoreWinBtn.innerHTML = '<span>❐</span> Window';
+        restoreWinBtn.title = "Restore to new window";
+        restoreWinBtn.onclick = () => actions.onRestoreWin(group.id);
+
+        // Restore Here
         const restoreBtn = document.createElement('button');
         restoreBtn.className = 'btn-restore';
-        restoreBtn.innerText = 'Restore All';
-        restoreBtn.onclick = () => onRestore(group.id);
+        restoreBtn.innerText = 'Restore';
+        restoreBtn.onclick = () => actions.onRestore(group.id);
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn-delete';
-        deleteBtn.innerText = 'Delete';
-        deleteBtn.onclick = () => onDelete(group.id);
-
+        btnContainer.appendChild(restoreWinBtn);
         btnContainer.appendChild(restoreBtn);
-        btnContainer.appendChild(deleteBtn);
-        header.appendChild(dateSpan);
+
+        // Delete (Hidden if pinned)
+        if (!group.pinned) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn-delete';
+            deleteBtn.innerText = 'Delete';
+            deleteBtn.onclick = () => actions.onDelete(group.id);
+            btnContainer.appendChild(deleteBtn);
+        }
+
         header.appendChild(btnContainer);
         groupDiv.appendChild(header);
 
-        // Tabs
+        // --- Tabs List Section ---
         const tabList = document.createElement('div');
         tabList.className = 'tab-list';
 
@@ -65,40 +128,29 @@ export class UIRenderer {
             const link = document.createElement('a');
             link.className = 'tab-link';
             link.href = tab.url;
-            link.onclick = (e) => { 
-                e.preventDefault(); 
-                browser.tabs.create({ url: tab.url, active: false }); 
+            link.onclick = (e) => {
+                e.preventDefault();
+                browser.tabs.create({ url: tab.url, active: false });
             };
-            
-            // Icon Handling (CSP Safe)
+
             if (config.showFavicons) {
                 const iconContainer = document.createElement('div');
-                iconContainer.className = 'favicon-container';
-                // Basic styling for container to align
-                iconContainer.style.width = '16px';
-                iconContainer.style.height = '16px';
-                iconContainer.style.marginRight = '12px';
-                iconContainer.style.flexShrink = '0';
-                iconContainer.style.display = 'flex';
-                iconContainer.style.alignItems = 'center';
-                iconContainer.style.justifyContent = 'center';
+                Object.assign(iconContainer.style, {
+                    width: '16px', height: '16px', marginRight: '12px',
+                    flexShrink: '0', display: 'flex', 
+                    alignItems: 'center', justifyContent: 'center'
+                });
 
                 if (tab.favIconUrl) {
                     const img = document.createElement('img');
                     img.src = tab.favIconUrl;
                     img.className = 'favicon';
-                    img.style.width = '100%';
-                    img.style.height = '100%';
-                    img.style.objectFit = 'contain';
-                    
-                    // Fix CSP violation by using addEventListener instead of onerror attribute
-                    img.addEventListener('error', () => {
-                        img.style.display = 'none';
+                    Object.assign(img.style, {
+                        width: '100%', height: '100%', objectFit: 'contain'
                     });
-                    
+                    img.addEventListener('error', () => { img.style.display = 'none'; });
                     iconContainer.appendChild(img);
                 } else {
-                    // Placeholder
                     iconContainer.style.backgroundColor = '#ccc';
                     iconContainer.style.borderRadius = '2px';
                 }
@@ -108,7 +160,7 @@ export class UIRenderer {
             const titleSpan = document.createElement('span');
             titleSpan.className = 'tab-title';
             titleSpan.innerText = tab.title || tab.url;
-            
+
             link.appendChild(titleSpan);
             tabList.appendChild(link);
         });

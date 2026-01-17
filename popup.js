@@ -13,7 +13,7 @@ async function initPopup() {
 }
 
 function setupEventListeners() {
-    // Actions
+    // Tab Actions
     bindAction('send-workspace', { currentWindow: true, hidden: false, pinned: false });
     bindAction('send-selected', { currentWindow: true, highlighted: true, pinned: false });
     bindAction('send-all', { currentWindow: true, pinned: false });
@@ -25,12 +25,11 @@ function setupEventListeners() {
     });
 
     document.getElementById('btn-settings-icon').addEventListener('click', () => {
-        // Use hash to direct options page to settings tab
         browser.tabs.create({ url: "options.html#view-settings" });
         window.close();
     });
 
-    // Filtering
+    // Filtering Controls
     document.getElementById('toggle-filter').addEventListener('click', handleToggleFilter);
     document.getElementById('mode-select').addEventListener('change', handleModeChange);
 }
@@ -43,11 +42,9 @@ function bindAction(elementId, query) {
 }
 
 async function loadInitialState() {
-    // Sync Select Box
     const settings = await settingsManager.getSettings();
     document.getElementById('mode-select').value = settings.mode;
 
-    // Identify Hostname
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     currentHostname = getHostname(tab?.url);
 
@@ -61,7 +58,7 @@ async function executeTabAction(query) {
         const result = await tabManager.getTabsForAction(query);
 
         if (result.tabsToSave.length > 0) {
-            // Send to background to save (keeps logic consistent if popup closes)
+            // Send to background to save (ensures completion if popup closes)
             await browser.runtime.sendMessage({ 
                 action: MESSAGES.SAVE_TABS, 
                 tabs: result.tabsToSave 
@@ -97,7 +94,6 @@ function renderFilterButton(settings) {
     const list = mode === MODES.BLACKLIST ? blacklist : whitelist;
     const isInList = list.includes(currentHostname);
 
-    // Dynamic UI states
     const states = {
         [MODES.BLACKLIST]: {
             added: { text: `Un-blacklist ${currentHostname}`, cls: 'btn-action-link bl-remove', title: "Allow this site" },
