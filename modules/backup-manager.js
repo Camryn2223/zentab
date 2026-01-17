@@ -61,15 +61,24 @@ class BackupManager {
             if (!cleanLine) return;
 
             // Format: https://url.com | Title
-            // Handle cases where title might be missing
-            const parts = cleanLine.split('|');
-            const url = parts[0].trim();
-            const title = parts[1] ? parts[1].trim() : url;
+            // We use indexOf to find the FIRST pipe. Everything after is the title.
+            // This prevents cutting off titles that contain pipes themselves.
+            const firstPipeIndex = cleanLine.indexOf('|');
+            
+            let url, title;
+
+            if (firstPipeIndex !== -1) {
+                url = cleanLine.substring(0, firstPipeIndex).trim();
+                title = cleanLine.substring(firstPipeIndex + 1).trim();
+            } else {
+                url = cleanLine;
+                title = cleanLine;
+            }
 
             if (url) {
                 tabs.push({
                     url: url,
-                    title: title,
+                    title: title || url, // Ensure title isn't empty
                     favIconUrl: '' // Icons are lost in text-only import
                 });
             }
@@ -88,7 +97,8 @@ class BackupManager {
 
         groups.forEach(group => {
             group.tabs.forEach(tab => {
-                exportText += `${tab.url} | ${tab.title}\n`;
+                const title = tab.title || tab.url;
+                exportText += `${tab.url} | ${title}\n`;
             });
             exportText += '\n';
         });

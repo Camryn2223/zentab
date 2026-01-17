@@ -41,7 +41,8 @@ export const DEFAULTS = {
         showFavicons: true,
         darkMode: true,
         autoDeduplicate: false,
-        consumeOnOpen: true
+        consumeOnOpen: true,
+        focusOnOpen: true
     },
     BACKUP_SETTINGS: {
         enabled: false,

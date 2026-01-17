@@ -3,7 +3,7 @@ import { settingsManager } from './modules/settings-manager.js';
 import { backupManager } from './modules/backup-manager.js';
 import { UIRenderer } from './modules/ui-renderer.js';
 import { store } from './modules/store.js';
-import { DragManager } from './modules/drag-manager.js'; // NEW
+import { DragManager } from './modules/drag-manager.js'; 
 import { MODES, MESSAGES } from './modules/constants.js';
 import { debounce } from './modules/utils.js';
 
@@ -101,7 +101,9 @@ class OptionsController {
                     const url = target.dataset.url;
                     const index = Number(target.dataset.index);
                     
-                    await browser.tabs.create({ url, active: false });
+                    // Determine if we should focus the new tab based on settings
+                    const shouldFocus = store.state.settings.general.focusOnOpen;
+                    await browser.tabs.create({ url, active: shouldFocus });
                     
                     if (store.state.settings.general.consumeOnOpen) {
                         await store.removeTab(id, index);
@@ -167,6 +169,7 @@ class OptionsController {
         };
 
         setCheck('setting-favicons', settings.general.showFavicons);
+        setCheck('setting-focus', settings.general.focusOnOpen); // NEW
         setCheck('setting-consume', settings.general.consumeOnOpen);
         setCheck('setting-dedupe', settings.general.autoDeduplicate);
         
@@ -231,6 +234,7 @@ class OptionsController {
             });
         };
         bindToggle('setting-favicons', 'showFavicons');
+        bindToggle('setting-focus', 'focusOnOpen'); // NEW
         bindToggle('setting-consume', 'consumeOnOpen');
         bindToggle('setting-dedupe', 'autoDeduplicate');
 
