@@ -1,22 +1,23 @@
-import { storageService } from './modules/storage.js';
+import { tabManager } from './modules/tab-manager.js';
+import { MESSAGES } from './modules/constants.js';
 
 browser.action.onClicked.addListener(() => {
     browser.runtime.openOptionsPage();
 });
 
-// Handle messages from popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === "saveTabs") {
+    if (message.action === MESSAGES.SAVE_TABS) {
         handleSaveTabs(message.tabs);
     }
-    // Return true if we needed to sendResponse asynchronously
+    // Return false as we don't need to keep the channel open for a response
+    return false;
 });
 
 async function handleSaveTabs(tabs) {
     try {
-        await storageService.saveGroup(tabs);
+        await tabManager.saveTabGroup(tabs);
         await browser.runtime.openOptionsPage();
     } catch (error) {
-        console.error("Failed to save tabs:", error);
+        console.error("ZenTab Error: Failed to save tabs", error);
     }
 }

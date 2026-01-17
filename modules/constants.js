@@ -10,8 +10,13 @@ export const MODES = {
     WHITELIST: 'whitelist'
 };
 
+export const MESSAGES = {
+    SAVE_TABS: 'saveTabs',
+    REFRESH_UI: 'refreshUi'
+};
+
 export const DEFAULTS = {
-    FILTER_MODE: 'blacklist',
+    FILTER_MODE: MODES.BLACKLIST,
     BLACKLIST: [],
     WHITELIST: [],
     TAB_GROUPS: []

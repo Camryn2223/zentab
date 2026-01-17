@@ -1,12 +1,26 @@
 import { STORAGE_KEYS, DEFAULTS } from './constants.js';
 
 class StorageService {
-    async get(keys) {
-        return await browser.storage.local.get(keys);
+    constructor() {
+        this.storage = browser.storage.local;
     }
 
+    /**
+     * Generic getter for storage keys.
+     * @param {string|string[]} keys 
+     * @returns {Promise<Object>}
+     */
+    async get(keys) {
+        return await this.storage.get(keys);
+    }
+
+    /**
+     * Generic setter for storage.
+     * @param {Object} data 
+     * @returns {Promise<void>}
+     */
     async set(data) {
-        return await browser.storage.local.set(data);
+        return await this.storage.set(data);
     }
 
     async getSettings() {
@@ -28,35 +42,14 @@ class StorageService {
         return data[STORAGE_KEYS.TAB_GROUPS] || DEFAULTS.TAB_GROUPS;
     }
 
-    async saveGroup(tabs) {
+    async saveGroup(groupData) {
         const groups = await this.getGroups();
-        
-        const newGroup = {
-            id: Date.now(),
-            date: new Date().toLocaleString(),
-            tabs: tabs
-        };
-
-        groups.unshift(newGroup);
+        groups.unshift(groupData);
         await this.set({ [STORAGE_KEYS.TAB_GROUPS]: groups });
     }
 
-    async updateDomainList(listName, list) {
-        await this.set({ [listName]: list });
-    }
-
-    async setMode(mode) {
-        await this.set({ [STORAGE_KEYS.FILTER_MODE]: mode });
-    }
-
-    async deleteGroup(id) {
-        const groups = await this.getGroups();
-        const newGroups = groups.filter(g => g.id !== id);
-        await this.set({ [STORAGE_KEYS.TAB_GROUPS]: newGroups });
-    }
-
-    async clearAllGroups() {
-        await this.set({ [STORAGE_KEYS.TAB_GROUPS]: [] });
+    async updateGroups(newGroupsList) {
+        await this.set({ [STORAGE_KEYS.TAB_GROUPS]: newGroupsList });
     }
 }
 

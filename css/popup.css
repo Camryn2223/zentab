@@ -1,26 +1,39 @@
 @import 'common.css';
 
 body {
-    width: 270px;
+    width: 280px;
     padding: 15px;
+}
+
+h3 {
+    margin-top: 0;
+    text-align: center;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+    font-size: 1.2rem;
 }
 
 button {
     width: 100%;
     padding: 10px;
     margin-bottom: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .btn-workspace { background-color: var(--accent-blue); color: var(--bg-base); }
 .btn-selected { background-color: var(--accent-mauve); color: var(--bg-base); }
-.btn-all { background-color: var(--bg-hover); color: var(--text-primary); }
+.btn-all { background-color: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-all:hover { background-color: var(--bg-hover); }
 
 .btn-view {
     background-color: transparent;
-    border: 1px solid var(--border);
+    border: 1px dashed var(--text-secondary);
     color: var(--text-secondary);
     margin-bottom: 0;
 }
+.btn-view:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
 /* FILTER SECTION */
 .filter-section {
@@ -36,11 +49,11 @@ select {
     background-color: var(--bg-surface);
     color: var(--text-primary);
     border: 1px solid var(--border);
-    padding: 5px;
+    padding: 6px;
     border-radius: 6px;
     width: 100%;
     outline: none;
-    font-size: 0.9em;
+    font-size: 0.85rem;
     cursor: pointer;
 }
 
@@ -48,15 +61,14 @@ select {
     background: none;
     text-decoration: underline;
     padding: 5px;
-    font-size: 0.9em;
+    font-size: 0.85rem;
     border: none;
     width: 100%;
     text-align: center;
 }
+.btn-action-link:hover { transform: none; }
 
 .bl-add { color: var(--accent-red); }
 .bl-remove { color: var(--accent-green); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); }
 .wl-add { color: var(--accent-green); }
 .wl-remove { color: var(--accent-red); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); }
-
-h3 { margin-top: 0; text-align: center; margin-bottom: 15px; color: var(--text-primary); }

@@ -1,129 +1,111 @@
-import { storageService } from './modules/storage.js';
-import { FilterService } from './modules/filters.js';
+import { tabManager } from './modules/tab-manager.js';
+import { settingsManager } from './modules/settings-manager.js';
 import { getHostname } from './modules/utils.js';
-import { MODES } from './modules/constants.js';
+import { MODES, MESSAGES } from './modules/constants.js';
 
 document.addEventListener('DOMContentLoaded', initPopup);
 
-// --- Initialization ---
 let currentHostname = null;
 
 async function initPopup() {
     setupEventListeners();
-
-    // 1. Initialize Mode Select
-    const settings = await storageService.getSettings();
-    document.getElementById('mode-select').value = settings.mode;
-
-    // 2. Identify Current Hostname
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    currentHostname = getHostname(tab?.url);
-
-    if (currentHostname) {
-        await updateFilterButtonUI(settings);
-    }
+    await loadInitialState();
 }
 
 function setupEventListeners() {
-    document.getElementById('send-workspace').addEventListener('click', () => 
-        handleTabAction({ currentWindow: true, hidden: false, pinned: false }));
-    
-    document.getElementById('send-selected').addEventListener('click', () => 
-        handleTabAction({ currentWindow: true, highlighted: true, pinned: false }));
-    
-    document.getElementById('send-all').addEventListener('click', () => 
-        handleTabAction({ currentWindow: true, pinned: false }));
+    // Actions
+    bindAction('send-workspace', { currentWindow: true, hidden: false, pinned: false });
+    bindAction('send-selected', { currentWindow: true, highlighted: true, pinned: false });
+    bindAction('send-all', { currentWindow: true, pinned: false });
 
+    // Navigation
     document.getElementById('open-dashboard').addEventListener('click', () => {
         browser.tabs.create({ url: "options.html" });
         window.close();
     });
 
+    // Filtering
     document.getElementById('toggle-filter').addEventListener('click', handleToggleFilter);
-
-    document.getElementById('mode-select').addEventListener('change', async (e) => {
-        await storageService.setMode(e.target.value);
-        const settings = await storageService.getSettings();
-        await updateFilterButtonUI(settings);
-    });
+    document.getElementById('mode-select').addEventListener('change', handleModeChange);
 }
 
-// --- Logic ---
-
-async function handleTabAction(queryObj) {
-    const tabs = await browser.tabs.query(queryObj);
-    if (!tabs.length) return;
-
-    const settings = await storageService.getSettings();
-    const result = filterTabs(tabs, settings);
-
-    if (result.tabsToSave.length > 0) {
-        await browser.runtime.sendMessage({ action: "saveTabs", tabs: result.tabsToSave });
-        await browser.tabs.remove(result.idsToClose);
+function bindAction(elementId, query) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.addEventListener('click', () => executeTabAction(query));
     }
-    window.close();
 }
 
-function filterTabs(tabs, settings) {
-    const tabsToSave = [];
-    const idsToClose = [];
+async function loadInitialState() {
+    // Sync Select Box
+    const settings = await settingsManager.getSettings();
+    document.getElementById('mode-select').value = settings.mode;
 
-    for (const tab of tabs) {
-        // Use FilterService to check if we should save
-        if (FilterService.shouldSave(tab.url, settings)) {
-            tabsToSave.push({
-                title: tab.title,
-                url: tab.url,
-                favIconUrl: tab.favIconUrl
+    // Identify Hostname
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    currentHostname = getHostname(tab?.url);
+
+    if (currentHostname) {
+        renderFilterButton(settings);
+    }
+}
+
+async function executeTabAction(query) {
+    try {
+        const result = await tabManager.getTabsForAction(query);
+
+        if (result.tabsToSave.length > 0) {
+            // Send to background to save (keeps logic consistent if popup closes)
+            await browser.runtime.sendMessage({ 
+                action: MESSAGES.SAVE_TABS, 
+                tabs: result.tabsToSave 
             });
-            idsToClose.push(tab.id);
+            await browser.tabs.remove(result.idsToClose);
         }
+        window.close();
+    } catch (e) {
+        console.error("Failed to process tabs", e);
     }
-    return { tabsToSave, idsToClose };
+}
+
+async function handleModeChange(e) {
+    await settingsManager.setMode(e.target.value);
+    const settings = await settingsManager.getSettings();
+    if (currentHostname) renderFilterButton(settings);
 }
 
 async function handleToggleFilter() {
     if (!currentHostname) return;
-    const settings = await storageService.getSettings();
-    await FilterService.toggleDomain(currentHostname, settings, storageService);
+    await settingsManager.toggleCurrentDomain(currentHostname);
     
-    // Refresh UI with new settings
-    const newSettings = await storageService.getSettings();
-    await updateFilterButtonUI(newSettings);
+    const settings = await settingsManager.getSettings();
+    renderFilterButton(settings);
 }
 
-async function updateFilterButtonUI(settings) {
+function renderFilterButton(settings) {
     const btn = document.getElementById('toggle-filter');
-    btn.style.display = 'inline-block';
-
     const { mode, blacklist, whitelist } = settings;
+    
+    btn.style.display = 'inline-block';
+    
     const list = mode === MODES.BLACKLIST ? blacklist : whitelist;
     const isInList = list.includes(currentHostname);
 
-    // Update Button State via Helper to keep this clean
-    renderFilterButton(btn, mode, isInList, currentHostname);
-}
+    // Dynamic UI states
+    const states = {
+        [MODES.BLACKLIST]: {
+            added: { text: `Un-blacklist ${currentHostname}`, cls: 'btn-action-link bl-remove', title: "Allow this site" },
+            removed: { text: `Blacklist ${currentHostname}`, cls: 'btn-action-link bl-add', title: "Block this site" }
+        },
+        [MODES.WHITELIST]: {
+            added: { text: `Un-whitelist ${currentHostname}`, cls: 'btn-action-link wl-remove', title: "Block this site" },
+            removed: { text: `Whitelist ${currentHostname}`, cls: 'btn-action-link wl-add', title: "Allow this site" }
+        }
+    };
 
-function renderFilterButton(btn, mode, isInList, hostname) {
-    if (mode === MODES.BLACKLIST) {
-        if (isInList) {
-            btn.innerText = `Un-blacklist ${hostname}`;
-            btn.className = 'btn-action-link bl-remove';
-            btn.title = "Allow this site to be saved";
-        } else {
-            btn.innerText = `Blacklist ${hostname}`;
-            btn.className = 'btn-action-link bl-add';
-            btn.title = "Never save tabs from this site";
-        }
-    } else {
-        if (isInList) {
-            btn.innerText = `Un-whitelist ${hostname}`;
-            btn.className = 'btn-action-link wl-remove';
-            btn.title = "Stop saving tabs from this site";
-        } else {
-            btn.innerText = `Whitelist ${hostname}`;
-            btn.className = 'btn-action-link wl-add';
-            btn.title = "Allow this site to be saved";
-        }
-    }
+    const state = isInList ? states[mode].added : states[mode].removed;
+    
+    btn.innerText = state.text;
+    btn.className = state.cls;
+    btn.title = state.title;
 }

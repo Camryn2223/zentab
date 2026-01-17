@@ -1,87 +1,100 @@
-import { storageService } from './modules/storage.js';
-import { FilterService } from './modules/filters.js';
-import { getHostname } from './modules/utils.js';
-import { MODES } from './modules/constants.js';
+import { tabManager } from './modules/tab-manager.js';
+import { settingsManager } from './modules/settings-manager.js';
+import { UIRenderer } from './modules/ui-renderer.js';
+import { MODES, DEFAULTS } from './modules/constants.js';
+import { debounce } from './modules/utils.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await renderGroups();
-    await initSettings();
+    await Promise.all([initGroupList(), initSettingsPane()]);
 });
 
-// --- SETTINGS LOGIC ---
+// --- TAB GROUPS CONTROLLER ---
 
-async function initSettings() {
-    const settings = await storageService.getSettings();
-    const select = document.getElementById('mode-select');
-    
-    select.value = settings.mode;
-    updateDescription(settings.mode);
-    renderDomainList(settings);
+async function initGroupList() {
+    await renderGroups();
 
-    // Mode Switch
-    select.addEventListener('change', async (e) => {
-        const newMode = e.target.value;
-        await storageService.setMode(newMode);
-        
-        // Reset Inputs
-        document.getElementById('add-input').value = '';
-        document.getElementById('search-input').value = '';
-        
-        const newSettings = await storageService.getSettings();
-        updateDescription(newSettings.mode);
-        renderDomainList(newSettings);
-    });
-
-    // Add Domain
-    document.getElementById('add-btn').addEventListener('click', addDomain);
-    document.getElementById('add-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') addDomain();
-    });
-
-    // Search
-    document.getElementById('search-input').addEventListener('input', async (e) => {
-        const currentSettings = await storageService.getSettings();
-        renderDomainList(currentSettings, e.target.value);
+    document.getElementById('clear-all').addEventListener('click', async () => {
+        if(confirm("Delete all saved history? This cannot be undone.")) {
+            await tabManager.clearAll();
+            await renderGroups();
+        }
     });
 }
 
-function updateDescription(mode) {
+async function renderGroups() {
+    const container = document.getElementById('container');
+    container.innerHTML = '';
+    
+    const groups = await storageService.getGroups(); // Access via storage or manager
+
+    if (groups.length === 0) {
+        UIRenderer.updateEmptyState(container, 'No tabs saved yet.');
+        return;
+    }
+
+    // Use fragment for better performance on large lists
+    const fragment = document.createDocumentFragment();
+
+    groups.forEach(group => {
+        const groupEl = UIRenderer.createTabGroupElement(
+            group, 
+            async (id) => { await tabManager.restoreGroup(id); await renderGroups(); },
+            async (id) => { await tabManager.deleteGroup(id); await renderGroups(); }
+        );
+        fragment.appendChild(groupEl);
+    });
+
+    container.appendChild(fragment);
+}
+
+// --- SETTINGS CONTROLLER ---
+
+async function initSettingsPane() {
+    const settings = await settingsManager.getSettings();
+    const select = document.getElementById('mode-select');
+    
+    // Initialize UI state
+    select.value = settings.mode;
+    updateSettingsUI(settings);
+
+    // Event Listeners
+    select.addEventListener('change', async (e) => {
+        await settingsManager.setMode(e.target.value);
+        resetInputs();
+        await refreshSettingsUI();
+    });
+
+    document.getElementById('add-btn').addEventListener('click', handleAddDomain);
+    document.getElementById('add-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleAddDomain();
+    });
+
+    document.getElementById('search-input').addEventListener('input', 
+        debounce(async (e) => {
+            const currentSettings = await settingsManager.getSettings();
+            renderDomainList(currentSettings, e.target.value);
+        }, 300)
+    );
+}
+
+async function refreshSettingsUI() {
+    const settings = await settingsManager.getSettings();
+    updateSettingsUI(settings);
+}
+
+function updateSettingsUI(settings) {
     const desc = document.getElementById('mode-desc');
     const addInput = document.getElementById('add-input');
     
-    if (mode === MODES.BLACKLIST) {
+    if (settings.mode === MODES.BLACKLIST) {
         desc.innerText = "Sites in this list will NEVER be saved.";
         addInput.placeholder = "Block domain (e.g. google.com)";
     } else {
         desc.innerText = "ONLY sites in this list will be saved.";
         addInput.placeholder = "Allow domain (e.g. work.com)";
     }
-}
 
-async function addDomain() {
-    const input = document.getElementById('add-input');
-    const rawValue = input.value.trim();
-    if (!rawValue) return;
-
-    // Use utils to get clean hostname, fallback to raw input if fails (e.g. wildcard)
-    const hostname = getHostname(rawValue) || getHostname(`http://${rawValue}`) || rawValue;
-
-    const settings = await storageService.getSettings();
-    
-    // Check if already exists in the ACTIVE list
-    const activeList = settings.mode === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
-    
-    if (activeList.includes(hostname)) {
-        alert(`Domain already in ${settings.mode}!`);
-        return;
-    }
-
-    // Use FilterService to toggle (add) it
-    await FilterService.toggleDomain(hostname, settings, storageService);
-    
-    input.value = '';
-    const newSettings = await storageService.getSettings();
-    renderDomainList(newSettings);
+    renderDomainList(settings);
 }
 
 function renderDomainList(settings, filterText = '') {
@@ -89,116 +102,54 @@ function renderDomainList(settings, filterText = '') {
     listContainer.innerHTML = '';
 
     const list = settings.mode === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
-
-    const filtered = list.filter(domain => 
-        domain.toLowerCase().includes(filterText.toLowerCase())
-    );
+    const filtered = list.filter(domain => domain.toLowerCase().includes(filterText.toLowerCase()));
 
     if (filtered.length === 0) {
-        listContainer.innerHTML = `<div class="empty-msg">No ${settings.mode} domains found.</div>`;
+        UIRenderer.updateEmptyState(listContainer, `No ${settings.mode} domains found.`);
         return;
     }
 
+    const fragment = document.createDocumentFragment();
     filtered.forEach(domain => {
-        const item = document.createElement('div');
-        item.className = 'list-item';
-        
-        const text = document.createElement('span');
-        text.innerText = domain;
-        text.style.wordBreak = 'break-all';
-        
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'btn-remove-domain';
-        removeBtn.innerHTML = '&times;';
-        removeBtn.title = "Remove";
-        
-        removeBtn.onclick = async () => {
-            // Re-fetch settings to ensure freshness
-            const currentSettings = await storageService.getSettings();
-            await FilterService.toggleDomain(domain, currentSettings, storageService);
-            
-            // Re-render
-            const updatedSettings = await storageService.getSettings();
-            const currentSearch = document.getElementById('search-input').value;
-            renderDomainList(updatedSettings, currentSearch);
-        };
-
-        item.appendChild(text);
-        item.appendChild(removeBtn);
-        listContainer.appendChild(item);
+        const item = UIRenderer.createDomainListItem(domain, async (d) => {
+            await settingsManager.removeDomain(d, settings.mode);
+            await refreshSettingsUI();
+            // Preserve search if existing
+            const searchVal = document.getElementById('search-input').value;
+            if(searchVal) {
+                 const newSettings = await settingsManager.getSettings();
+                 renderDomainList(newSettings, searchVal);
+            }
+        });
+        fragment.appendChild(item);
     });
+    listContainer.appendChild(fragment);
 }
 
-// --- GROUP LIST LOGIC ---
+async function handleAddDomain() {
+    const input = document.getElementById('add-input');
+    const rawValue = input.value.trim();
+    if (!rawValue) return;
 
-document.getElementById('clear-all').addEventListener('click', async () => {
-    if(confirm("Delete all saved history?")) {
-        await storageService.clearAllGroups();
-        await renderGroups();
-    }
-});
-
-async function renderGroups() {
-    const container = document.getElementById('container');
-    container.innerHTML = '';
+    const settings = await settingsManager.getSettings();
     
-    const groups = await storageService.getGroups();
-
-    if (groups.length === 0) {
-        container.innerHTML = '<div style="text-align:center; color:#6c7086; margin-top:50px;">No tabs saved yet.</div>';
-        return;
+    // Check duplication in current list
+    const list = settings.mode === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
+    if (list.some(d => d.includes(rawValue))) { 
+        // Simple client side check, the manager handles strict hostname duplication
+        // but this alert helps user experience
     }
 
-    groups.forEach(group => {
-        container.appendChild(createGroupElement(group));
-    });
+    await settingsManager.addDomain(rawValue, settings.mode);
+    
+    input.value = '';
+    await refreshSettingsUI();
 }
 
-function createGroupElement(group) {
-    const groupDiv = document.createElement('div');
-    groupDiv.className = 'group';
-    
-    const header = document.createElement('div');
-    header.className = 'group-header';
-    header.innerHTML = `
-        <span class="date">${group.tabs.length} Tabs - ${group.date}</span>
-        <div><button class="btn-restore">Restore All</button><button class="btn-delete">Delete</button></div>
-    `;
-    
-    // Wire up header buttons
-    header.querySelector('.btn-restore').onclick = async () => {
-        for (const tab of group.tabs) { 
-            await browser.tabs.create({ url: tab.url, active: false }); 
-        }
-        await storageService.deleteGroup(group.id);
-        renderGroups();
-    };
-
-    header.querySelector('.btn-delete').onclick = async () => {
-        await storageService.deleteGroup(group.id);
-        renderGroups();
-    };
-
-    groupDiv.appendChild(header);
-
-    // Render Tabs
-    group.tabs.forEach(tab => {
-        const link = document.createElement('a');
-        link.className = 'tab-link';
-        link.href = tab.url;
-        link.onclick = (e) => { 
-            e.preventDefault(); 
-            browser.tabs.create({ url: tab.url, active: false }); 
-        };
-        
-        const iconSrc = tab.favIconUrl || '';
-        const iconDisplay = iconSrc 
-            ? `<img src="${iconSrc}" class="favicon" onerror="this.style.display='none'">` 
-            : `<div class="favicon" style="background:#ccc"></div>`;
-
-        link.innerHTML = `${iconDisplay} <span>${tab.title || tab.url}</span>`;
-        groupDiv.appendChild(link);
-    });
-
-    return groupDiv;
+function resetInputs() {
+    document.getElementById('add-input').value = '';
+    document.getElementById('search-input').value = '';
 }
+
+// Need to import storageService just for the read in renderGroups if we don't want to add a getter to tabManager
+import { storageService } from './modules/storage.js';

@@ -15,17 +15,19 @@ body {
     background-color: var(--bg-base);
     color: var(--text-primary);
     font-family: system-ui, -apple-system, sans-serif;
+    margin: 0;
 }
 
 button {
     cursor: pointer;
     font-weight: 600;
-    transition: opacity 0.2s;
+    transition: all 0.2s ease;
     border: none;
     border-radius: 8px;
 }
 
-button:hover { opacity: 0.9; }
+button:hover { opacity: 0.9; transform: translateY(-1px); }
+button:active { transform: translateY(0); }
 
 .input-dark {
     background-color: var(--bg-base);
@@ -36,5 +38,13 @@ button:hover { opacity: 0.9; }
     width: 100%;
     box-sizing: border-box;
     outline: none;
+    transition: border-color 0.2s;
 }
 .input-dark:focus { border-color: var(--accent-blue); }
+
+.empty-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-top: 20px;
+    font-style: italic;
+}
