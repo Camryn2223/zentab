@@ -24,6 +24,12 @@ function setupEventListeners() {
         window.close();
     });
 
+    document.getElementById('btn-settings-icon').addEventListener('click', () => {
+        // Use hash to direct options page to settings tab
+        browser.tabs.create({ url: "options.html#view-settings" });
+        window.close();
+    });
+
     // Filtering
     document.getElementById('toggle-filter').addEventListener('click', handleToggleFilter);
     document.getElementById('mode-select').addEventListener('change', handleModeChange);

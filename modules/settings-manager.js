@@ -16,6 +16,10 @@ class SettingsManager {
         await storageService.updateGeneralSettings({ [key]: value });
     }
 
+    async saveBackupConfig(config) {
+        await storageService.updateBackupSettings(config);
+    }
+
     /**
      * Checks if a specific URL should be saved.
      */
@@ -34,9 +38,6 @@ class SettingsManager {
         return true;
     }
 
-    /**
-     * Toggle domain in Active List
-     */
     async toggleCurrentDomain(hostname) {
         if (!hostname) return;
 

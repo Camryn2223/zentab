@@ -3,7 +3,8 @@ export const STORAGE_KEYS = {
     FILTER_MODE: 'filterMode',
     BLACKLIST: 'blacklistedDomains',
     WHITELIST: 'whitelistedDomains',
-    GENERAL_SETTINGS: 'generalSettings'
+    GENERAL_SETTINGS: 'generalSettings',
+    BACKUP_SETTINGS: 'backupSettings'
 };
 
 export const MODES = {
@@ -13,7 +14,9 @@ export const MODES = {
 
 export const MESSAGES = {
     SAVE_TABS: 'saveTabs',
-    REFRESH_UI: 'refreshUi'
+    REFRESH_UI: 'refreshUi',
+    SCHEDULE_BACKUP: 'scheduleBackup',
+    PERFORM_BACKUP: 'performBackup'
 };
 
 export const DEFAULTS = {
@@ -23,6 +26,11 @@ export const DEFAULTS = {
     TAB_GROUPS: [],
     GENERAL_SETTINGS: {
         showFavicons: true,
-        darkMode: true // Future proofing
+        darkMode: true
+    },
+    BACKUP_SETTINGS: {
+        enabled: false,
+        intervalValue: 1,
+        intervalUnit: 'days',
     }
 };

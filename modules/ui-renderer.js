@@ -70,15 +70,46 @@ export class UIRenderer {
                 browser.tabs.create({ url: tab.url, active: false }); 
             };
             
-            let iconDisplay = '';
+            // Icon Handling (CSP Safe)
             if (config.showFavicons) {
-                const iconSrc = tab.favIconUrl || '';
-                iconDisplay = iconSrc 
-                    ? `<img src="${iconSrc}" class="favicon" onerror="this.style.display='none'">` 
-                    : `<div class="favicon" style="background:#ccc"></div>`;
+                const iconContainer = document.createElement('div');
+                iconContainer.className = 'favicon-container';
+                // Basic styling for container to align
+                iconContainer.style.width = '16px';
+                iconContainer.style.height = '16px';
+                iconContainer.style.marginRight = '12px';
+                iconContainer.style.flexShrink = '0';
+                iconContainer.style.display = 'flex';
+                iconContainer.style.alignItems = 'center';
+                iconContainer.style.justifyContent = 'center';
+
+                if (tab.favIconUrl) {
+                    const img = document.createElement('img');
+                    img.src = tab.favIconUrl;
+                    img.className = 'favicon';
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'contain';
+                    
+                    // Fix CSP violation by using addEventListener instead of onerror attribute
+                    img.addEventListener('error', () => {
+                        img.style.display = 'none';
+                    });
+                    
+                    iconContainer.appendChild(img);
+                } else {
+                    // Placeholder
+                    iconContainer.style.backgroundColor = '#ccc';
+                    iconContainer.style.borderRadius = '2px';
+                }
+                link.appendChild(iconContainer);
             }
 
-            link.innerHTML = `${iconDisplay} <span class="tab-title">${tab.title || tab.url}</span>`;
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'tab-title';
+            titleSpan.innerText = tab.title || tab.url;
+            
+            link.appendChild(titleSpan);
             tabList.appendChild(link);
         });
 

@@ -120,6 +120,12 @@ p { margin: 10px 0 10px 0; font-size: 0.9em; color: var(--text-secondary); }
     margin-top: 20px;
 }
 
+.right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
 .settings-card {
     background-color: var(--bg-surface);
     border-radius: 12px;
@@ -154,12 +160,45 @@ p { margin: 10px 0 10px 0; font-size: 0.9em; color: var(--text-secondary); }
     justify-content: space-between;
     align-items: center;
     padding: 12px 0;
-    border-bottom: 1px solid var(--border);
 }
-.setting-row:last-child { border-bottom: none; }
-.setting-row.disabled { opacity: 0.5; pointer-events: none; }
 
 input[type="checkbox"] {
     width: 20px; height: 20px; cursor: pointer;
     accent-color: var(--accent-mauve);
+}
+
+/* Backup Actions */
+.btn-primary {
+    background-color: var(--accent-blue);
+    color: var(--bg-base);
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 8px;
+    flex: 1;
+}
+.btn-secondary:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.backup-config { margin-top: 10px; }
+.auto-options { 
+    margin-top: 15px; 
+    transition: opacity 0.2s; 
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+}
+
+.input-group { display: flex; gap: 10px; margin-top: 8px; }
+.small { width: 80px; }
+
+.small-hint {
+    font-size: 0.8em;
+    font-style: italic;
+    color: var(--text-secondary);
+    margin-top: 8px;
 }
