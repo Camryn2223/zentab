@@ -7,34 +7,82 @@
 </head>
 <body>
 
-  <div class="main-col">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h1>ZenTab</h1>
-      <button id="clear-all" class="btn-delete">Delete Everything</button>
+  <!-- Navigation Rail -->
+  <nav class="sidebar">
+    <div class="logo">ZenTab</div>
+    
+    <div class="nav-links">
+      <button class="nav-btn active" data-target="view-dashboard">
+        Dashboard
+      </button>
+      <button class="nav-btn" data-target="view-settings">
+        Settings
+      </button>
     </div>
-    <div id="container"></div>
-  </div>
+  </nav>
 
-  <div class="side-col">
-    <div class="settings-box">
-      <h3>Filtering Mode</h3>
-      <select id="mode-select" class="mode-select">
-        <option value="blacklist">Blacklist (Block Specific)</option>
-        <option value="whitelist">Whitelist (Allow Specific)</option>
-      </select>
-      
-      <p id="mode-desc">Only sites NOT in this list will be saved.</p>
-      
-      <div class="add-row">
-        <input type="text" id="add-input" class="input-dark" placeholder="example.com">
-        <button id="add-btn" class="btn-add">+</button>
+  <!-- Main Content Area -->
+  <main class="content-area">
+    
+    <!-- VIEW: DASHBOARD (Saved Tabs) -->
+    <section id="view-dashboard" class="view-section active">
+      <div class="view-header">
+        <h1>Your Workspace History</h1>
+        <button id="clear-all" class="btn-delete-all">Delete Everything</button>
       </div>
+      
+      <div id="container"></div>
+    </section>
 
-      <input type="text" id="search-input" class="input-dark" placeholder="Search domains...">
+    <!-- VIEW: SETTINGS -->
+    <section id="view-settings" class="view-section" style="display:none;">
+      <h1>Settings</h1>
+      
+      <div class="settings-grid">
+        
+        <!-- Column 1: Domain Filtering -->
+        <div class="settings-card">
+          <h3>Domain Filtering</h3>
+          <p>Control which sites are allowed to be saved.</p>
+          
+          <div class="control-group">
+            <select id="mode-select" class="mode-select">
+              <option value="blacklist">Blacklist (Block Specific)</option>
+              <option value="whitelist">Whitelist (Allow Specific)</option>
+            </select>
+            <p id="mode-desc">Only sites NOT in this list will be saved.</p>
+          </div>
 
-      <div id="domain-list"></div>
-    </div>
-  </div>
+          <div class="add-row">
+            <input type="text" id="add-input" class="input-dark" placeholder="example.com">
+            <button id="add-btn" class="btn-add">+</button>
+          </div>
+
+          <input type="text" id="search-input" class="input-dark" placeholder="Search domains...">
+
+          <div id="domain-list"></div>
+        </div>
+
+        <!-- Column 2: General Options -->
+        <div class="settings-card">
+          <h3>General</h3>
+          
+          <div class="setting-row">
+            <label for="setting-favicons">Show Favicons</label>
+            <input type="checkbox" id="setting-favicons">
+          </div>
+          
+          <!-- Future settings can go here -->
+          <div class="setting-row disabled">
+             <label>Auto-delete after 30 days (Coming Soon)</label>
+             <input type="checkbox" disabled>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
 
   <script type="module" src="options.js"></script>
 </body>

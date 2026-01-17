@@ -2,7 +2,8 @@ export const STORAGE_KEYS = {
     TAB_GROUPS: 'tabGroups',
     FILTER_MODE: 'filterMode',
     BLACKLIST: 'blacklistedDomains',
-    WHITELIST: 'whitelistedDomains'
+    WHITELIST: 'whitelistedDomains',
+    GENERAL_SETTINGS: 'generalSettings'
 };
 
 export const MODES = {
@@ -19,5 +20,9 @@ export const DEFAULTS = {
     FILTER_MODE: MODES.BLACKLIST,
     BLACKLIST: [],
     WHITELIST: [],
-    TAB_GROUPS: []
+    TAB_GROUPS: [],
+    GENERAL_SETTINGS: {
+        showFavicons: true,
+        darkMode: true // Future proofing
+    }
 };

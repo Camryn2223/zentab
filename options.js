@@ -1,14 +1,43 @@
 import { tabManager } from './modules/tab-manager.js';
 import { settingsManager } from './modules/settings-manager.js';
+import { storageService } from './modules/storage.js';
 import { UIRenderer } from './modules/ui-renderer.js';
-import { MODES, DEFAULTS } from './modules/constants.js';
+import { MODES } from './modules/constants.js';
 import { debounce } from './modules/utils.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+    initNavigation();
     await Promise.all([initGroupList(), initSettingsPane()]);
 });
 
-// --- TAB GROUPS CONTROLLER ---
+// --- NAVIGATION ---
+
+function initNavigation() {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const sections = document.querySelectorAll('.view-section');
+
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active classes
+            navBtns.forEach(b => b.classList.remove('active'));
+            sections.forEach(s => {
+                s.style.display = 'none';
+                s.classList.remove('active');
+            });
+
+            // Add active to current
+            btn.classList.add('active');
+            const targetId = btn.dataset.target;
+            const targetSection = document.getElementById(targetId);
+            if (targetSection) {
+                targetSection.style.display = 'block';
+                targetSection.classList.add('active');
+            }
+        });
+    });
+}
+
+// --- TAB GROUPS CONTROLLER (DASHBOARD) ---
 
 async function initGroupList() {
     await renderGroups();
@@ -25,21 +54,23 @@ async function renderGroups() {
     const container = document.getElementById('container');
     container.innerHTML = '';
     
-    const groups = await storageService.getGroups(); // Access via storage or manager
+    // Get Settings to know if we show favicons
+    const settings = await settingsManager.getSettings();
+    const groups = await storageService.getGroups();
 
     if (groups.length === 0) {
         UIRenderer.updateEmptyState(container, 'No tabs saved yet.');
         return;
     }
 
-    // Use fragment for better performance on large lists
     const fragment = document.createDocumentFragment();
 
     groups.forEach(group => {
         const groupEl = UIRenderer.createTabGroupElement(
             group, 
             async (id) => { await tabManager.restoreGroup(id); await renderGroups(); },
-            async (id) => { await tabManager.deleteGroup(id); await renderGroups(); }
+            async (id) => { await tabManager.deleteGroup(id); await renderGroups(); },
+            { showFavicons: settings.general.showFavicons }
         );
         fragment.appendChild(groupEl);
     });
@@ -51,13 +82,12 @@ async function renderGroups() {
 
 async function initSettingsPane() {
     const settings = await settingsManager.getSettings();
-    const select = document.getElementById('mode-select');
     
-    // Initialize UI state
+    // 1. Domain Filter Logic
+    const select = document.getElementById('mode-select');
     select.value = settings.mode;
-    updateSettingsUI(settings);
+    updateDomainUI(settings);
 
-    // Event Listeners
     select.addEventListener('change', async (e) => {
         await settingsManager.setMode(e.target.value);
         resetInputs();
@@ -75,14 +105,24 @@ async function initSettingsPane() {
             renderDomainList(currentSettings, e.target.value);
         }, 300)
     );
+
+    // 2. General Settings Logic
+    const faviconCheckbox = document.getElementById('setting-favicons');
+    faviconCheckbox.checked = settings.general.showFavicons;
+    
+    faviconCheckbox.addEventListener('change', async (e) => {
+        await settingsManager.updateGeneralSetting('showFavicons', e.target.checked);
+        // Re-render dashboard to reflect changes
+        await renderGroups(); 
+    });
 }
 
 async function refreshSettingsUI() {
     const settings = await settingsManager.getSettings();
-    updateSettingsUI(settings);
+    updateDomainUI(settings);
 }
 
-function updateSettingsUI(settings) {
+function updateDomainUI(settings) {
     const desc = document.getElementById('mode-desc');
     const addInput = document.getElementById('add-input');
     
@@ -114,7 +154,7 @@ function renderDomainList(settings, filterText = '') {
         const item = UIRenderer.createDomainListItem(domain, async (d) => {
             await settingsManager.removeDomain(d, settings.mode);
             await refreshSettingsUI();
-            // Preserve search if existing
+            
             const searchVal = document.getElementById('search-input').value;
             if(searchVal) {
                  const newSettings = await settingsManager.getSettings();
@@ -132,14 +172,6 @@ async function handleAddDomain() {
     if (!rawValue) return;
 
     const settings = await settingsManager.getSettings();
-    
-    // Check duplication in current list
-    const list = settings.mode === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
-    if (list.some(d => d.includes(rawValue))) { 
-        // Simple client side check, the manager handles strict hostname duplication
-        // but this alert helps user experience
-    }
-
     await settingsManager.addDomain(rawValue, settings.mode);
     
     input.value = '';
@@ -150,6 +182,3 @@ function resetInputs() {
     document.getElementById('add-input').value = '';
     document.getElementById('search-input').value = '';
 }
-
-// Need to import storageService just for the read in renderGroups if we don't want to add a getter to tabManager
-import { storageService } from './modules/storage.js';

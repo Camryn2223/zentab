@@ -5,20 +5,10 @@ class StorageService {
         this.storage = browser.storage.local;
     }
 
-    /**
-     * Generic getter for storage keys.
-     * @param {string|string[]} keys 
-     * @returns {Promise<Object>}
-     */
     async get(keys) {
         return await this.storage.get(keys);
     }
 
-    /**
-     * Generic setter for storage.
-     * @param {Object} data 
-     * @returns {Promise<void>}
-     */
     async set(data) {
         return await this.storage.set(data);
     }
@@ -27,13 +17,15 @@ class StorageService {
         const data = await this.get([
             STORAGE_KEYS.FILTER_MODE,
             STORAGE_KEYS.BLACKLIST,
-            STORAGE_KEYS.WHITELIST
+            STORAGE_KEYS.WHITELIST,
+            STORAGE_KEYS.GENERAL_SETTINGS
         ]);
 
         return {
             mode: data[STORAGE_KEYS.FILTER_MODE] || DEFAULTS.FILTER_MODE,
             blacklist: data[STORAGE_KEYS.BLACKLIST] || DEFAULTS.BLACKLIST,
-            whitelist: data[STORAGE_KEYS.WHITELIST] || DEFAULTS.WHITELIST
+            whitelist: data[STORAGE_KEYS.WHITELIST] || DEFAULTS.WHITELIST,
+            general: { ...DEFAULTS.GENERAL_SETTINGS, ...data[STORAGE_KEYS.GENERAL_SETTINGS] }
         };
     }
 
@@ -50,6 +42,13 @@ class StorageService {
 
     async updateGroups(newGroupsList) {
         await this.set({ [STORAGE_KEYS.TAB_GROUPS]: newGroupsList });
+    }
+    
+    async updateGeneralSettings(newSettings) {
+        // Merge with existing to prevent overwriting keys not passed in
+        const current = await this.getSettings();
+        const merged = { ...current.general, ...newSettings };
+        await this.set({ [STORAGE_KEYS.GENERAL_SETTINGS]: merged });
     }
 }
 

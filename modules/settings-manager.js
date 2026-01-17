@@ -12,11 +12,12 @@ class SettingsManager {
         await storageService.set({ [STORAGE_KEYS.FILTER_MODE]: mode });
     }
 
+    async updateGeneralSetting(key, value) {
+        await storageService.updateGeneralSettings({ [key]: value });
+    }
+
     /**
-     * Checks if a specific URL should be saved based on current settings.
-     * @param {string} url 
-     * @param {Object} [cachedSettings] Optional optimization to avoid async fetch
-     * @returns {Promise<boolean>}
+     * Checks if a specific URL should be saved.
      */
     async shouldSaveUrl(url, cachedSettings = null) {
         const hostname = getHostname(url);
@@ -34,8 +35,7 @@ class SettingsManager {
     }
 
     /**
-     * Adds or removes a domain from the ACTIVE list (based on current mode).
-     * @param {string} hostname 
+     * Toggle domain in Active List
      */
     async toggleCurrentDomain(hostname) {
         if (!hostname) return;
@@ -66,7 +66,6 @@ class SettingsManager {
     }
 
     async addDomain(domainInput, listType) {
-        // Normalize input
         const hostname = getHostname(domainInput) || getHostname(`http://${domainInput}`) || domainInput;
         if (!hostname) return;
 
@@ -74,7 +73,7 @@ class SettingsManager {
         const listKey = listType === MODES.BLACKLIST ? STORAGE_KEYS.BLACKLIST : STORAGE_KEYS.WHITELIST;
         const currentList = listType === MODES.BLACKLIST ? settings.blacklist : settings.whitelist;
 
-        if (currentList.includes(hostname)) return; // No duplicate
+        if (currentList.includes(hostname)) return; 
 
         const newList = [...currentList, hostname].sort();
         await storageService.set({ [listKey]: newList });

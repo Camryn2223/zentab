@@ -19,10 +19,17 @@ export class UIRenderer {
         return item;
     }
 
-    static createTabGroupElement(group, onRestore, onDelete) {
+    /**
+     * Creates the group element.
+     * @param {Object} group Data
+     * @param {Function} onRestore 
+     * @param {Function} onDelete 
+     * @param {Object} config { showFavicons: boolean }
+     */
+    static createTabGroupElement(group, onRestore, onDelete, config = { showFavicons: true }) {
         const groupDiv = document.createElement('div');
         groupDiv.className = 'group';
-        groupDiv.dataset.id = group.id; // Helpful for debugging or DOM selection
+        groupDiv.dataset.id = group.id;
         
         // Header
         const header = document.createElement('div');
@@ -52,7 +59,7 @@ export class UIRenderer {
 
         // Tabs
         const tabList = document.createElement('div');
-        tabList.className = 'tab-list'; // CSS hook
+        tabList.className = 'tab-list';
 
         group.tabs.forEach(tab => {
             const link = document.createElement('a');
@@ -63,10 +70,13 @@ export class UIRenderer {
                 browser.tabs.create({ url: tab.url, active: false }); 
             };
             
-            const iconSrc = tab.favIconUrl || '';
-            const iconDisplay = iconSrc 
-                ? `<img src="${iconSrc}" class="favicon" onerror="this.style.display='none'">` 
-                : `<div class="favicon" style="background:#ccc"></div>`;
+            let iconDisplay = '';
+            if (config.showFavicons) {
+                const iconSrc = tab.favIconUrl || '';
+                iconDisplay = iconSrc 
+                    ? `<img src="${iconSrc}" class="favicon" onerror="this.style.display='none'">` 
+                    : `<div class="favicon" style="background:#ccc"></div>`;
+            }
 
             link.innerHTML = `${iconDisplay} <span class="tab-title">${tab.title || tab.url}</span>`;
             tabList.appendChild(link);
