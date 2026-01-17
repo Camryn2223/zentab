@@ -3,11 +3,6 @@ import { settingsManager } from './settings-manager.js';
 
 class TabManager {
 
-    /**
-     * Query tabs, filter them using settings, and return the result.
-     * @param {Object} queryObj - browser.tabs.query parameters
-     * @returns {Promise<{tabsToSave: Array, idsToClose: Array}>}
-     */
     async getTabsForAction(queryObj) {
         const tabs = await browser.tabs.query(queryObj);
         if (!tabs.length) return { tabsToSave: [], idsToClose: [] };
@@ -17,7 +12,6 @@ class TabManager {
         const idsToClose = [];
 
         for (const tab of tabs) {
-            // Business logic for filtering is delegated to SettingsManager
             const allowed = await settingsManager.shouldSaveUrl(tab.url, settings);
 
             if (allowed) {
@@ -34,40 +28,48 @@ class TabManager {
     }
 
     /**
-     * Persist a list of tabs as a new group.
-     * @param {Array} tabs
+     * Persist a list of tabs.
+     * @param {Array} tabsOrGroup - Either an array of tabs OR a full group object (for undo/restore).
      */
-    async saveTabGroup(tabs) {
-        if (!tabs || tabs.length === 0) return;
+    async saveTabGroup(tabsOrGroup) {
+        if (!tabsOrGroup) return;
 
-        const groupData = {
-            id: Date.now(),
-            date: new Date().toLocaleString(),
-            tabs: tabs,
-            pinned: false,
-            customTitle: null
-        };
+        let groupData;
+
+        // Check if we are restoring a full group object (Undo action)
+        if (!Array.isArray(tabsOrGroup) && tabsOrGroup.id && tabsOrGroup.tabs) {
+            groupData = tabsOrGroup;
+        } else {
+            // New Save
+            if (tabsOrGroup.length === 0) return;
+            groupData = {
+                id: Date.now(),
+                date: new Date().toLocaleString(),
+                tabs: tabsOrGroup,
+                pinned: false,
+                customTitle: null
+            };
+        }
 
         await storageService.saveGroup(groupData);
 
-        // Feature: Auto-Deduplicate
+        // Feature: Auto-Deduplicate (only on new saves, typically)
         const settings = await settingsManager.getSettings();
-        if (settings.general.autoDeduplicate) {
+        if (settings.general.autoDeduplicate && Array.isArray(tabsOrGroup)) {
             await this.removeDuplicates();
         }
     }
 
     async deleteGroup(groupId) {
         const groups = await storageService.getGroups();
-        // Force numeric comparison if ID types differ
+        const groupToDelete = groups.find(g => Number(g.id) === Number(groupId));
+        
         const newGroups = groups.filter(g => Number(g.id) !== Number(groupId));
         await storageService.updateGroups(newGroups);
+        
+        return groupToDelete; // Return for Undo capability
     }
 
-    /**
-     * Remove a single tab from a group.
-     * If group becomes empty and is not pinned, delete the group.
-     */
     async removeTab(groupId, tabIndex) {
         const groups = await storageService.getGroups();
         const group = groups.find(g => Number(g.id) === Number(groupId));
@@ -75,13 +77,10 @@ class TabManager {
         if (group && group.tabs[tabIndex]) {
             group.tabs.splice(tabIndex, 1);
             
-            // Check if group is empty
             if (group.tabs.length === 0 && !group.pinned) {
-                // Remove the group entirely
                 const newGroups = groups.filter(g => Number(g.id) !== Number(groupId));
                 await storageService.updateGroups(newGroups);
             } else {
-                // Just save the modified group
                 await storageService.updateGroups(groups);
             }
         }
@@ -96,7 +95,6 @@ class TabManager {
                 await browser.tabs.create({ url: tab.url, active: false });
             }
             
-            // Only delete if NOT pinned
             if (!group.pinned) {
                 await this.deleteGroup(groupId);
             }
@@ -145,7 +143,6 @@ class TabManager {
         const groups = await storageService.getGroups();
         const pinnedGroups = groups.filter(g => g.pinned);
         await storageService.updateGroups(pinnedGroups);
-        
         return pinnedGroups.length; 
     }
 
@@ -154,7 +151,6 @@ class TabManager {
         const seenUrls = new Set();
         let removedCount = 0;
 
-        // Order logic: Pinned first, then Original Order (Newest first)
         const orderedIndices = groups.map((g, index) => ({ index, pinned: g.pinned, id: g.id }))
             .sort((a, b) => {
                 if (a.pinned && !b.pinned) return -1;

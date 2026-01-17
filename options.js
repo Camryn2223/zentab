@@ -44,6 +44,7 @@ function navigateTo(targetId) {
 // --- DASHBOARD (SAVED TABS) ---
 let allGroups = []; 
 let currentSearchTerm = ''; 
+let lastDeletedGroup = null; // For Undo functionality
 
 async function initGroupList() {
     await loadAndRenderGroups();
@@ -101,17 +102,27 @@ async function renderGroups(groupsToRender) {
         const actions = {
             onRestore: async (id) => { await tabManager.restoreGroup(id); await loadAndRenderGroups(); },
             onRestoreWin: async (id) => { await tabManager.restoreGroupInNewWindow(id); await loadAndRenderGroups(); },
-            onDelete: async (id) => { await tabManager.deleteGroup(id); await loadAndRenderGroups(); },
+            
+            // Modified Delete with Undo
+            onDelete: async (id) => { 
+                lastDeletedGroup = await tabManager.deleteGroup(id);
+                await loadAndRenderGroups();
+                UIRenderer.showToast("Group deleted", "Undo", async () => {
+                    if (lastDeletedGroup) {
+                        await tabManager.saveTabGroup(lastDeletedGroup);
+                        await loadAndRenderGroups();
+                        lastDeletedGroup = null;
+                    }
+                });
+            },
+            
             onPin: async (id) => { await tabManager.togglePin(id); await loadAndRenderGroups(); },
+            
             // Single Tab Click Handler
             onTabClick: async (groupId, tabIndex, tab) => {
-                // 1. Open Tab (in background to maintain list context)
                 await browser.tabs.create({ url: tab.url, active: false });
-                
-                // 2. Check setting and remove if enabled
                 if (settings.general.consumeOnOpen) {
                     await tabManager.removeTab(groupId, tabIndex);
-                    // Re-render to show updated list
                     await loadAndRenderGroups();
                 }
             }
@@ -137,7 +148,9 @@ async function handleClearAll() {
     if (hasUnpinned && confirm("Delete all UNPINNED groups? Pinned groups will be saved.")) {
         const remaining = await tabManager.clearAll();
         if(remaining > 0) {
-            alert(`Cleared history. ${remaining} pinned groups kept.`);
+            UIRenderer.showToast(`Cleared history. ${remaining} pinned groups kept.`);
+        } else {
+            UIRenderer.showToast("History cleared.");
         }
         await loadAndRenderGroups();
     } else if (!hasUnpinned) {
@@ -149,7 +162,7 @@ async function handleDeduplicate() {
     if (confirm("Remove duplicate tabs across all groups?\n\nPinned groups and newest items will be kept.")) {
         const removedCount = await tabManager.removeDuplicates();
         await loadAndRenderGroups();
-        alert(`Cleanup complete! Removed ${removedCount} duplicates.`);
+        UIRenderer.showToast(`Cleanup complete! Removed ${removedCount} duplicates.`);
     }
 }
 
@@ -177,7 +190,6 @@ async function initSettingsPane() {
     consumeCheckbox.checked = settings.general.consumeOnOpen;
     consumeCheckbox.addEventListener('change', async (e) => {
         await settingsManager.updateGeneralSetting('consumeOnOpen', e.target.checked);
-        // No need to re-render, takes effect on next click
     });
 
     // Auto-Dedupe Toggle

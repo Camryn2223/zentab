@@ -1,19 +1,113 @@
 import { tabManager } from './modules/tab-manager.js';
 import { settingsManager } from './modules/settings-manager.js';
 import { backupManager } from './modules/backup-manager.js';
-import { MESSAGES, BACKUP_CONFIG } from './modules/constants.js';
+import { MESSAGES, BACKUP_CONFIG, CM_IDS, COMMANDS } from './modules/constants.js';
 
 console.log("ZenTab: Background script started.");
 
-// Open options on toolbar click
-browser.action.onClicked.addListener(() => {
-    browser.runtime.openOptionsPage();
+// --- INITIALIZATION ---
+browser.runtime.onInstalled.addListener(() => {
+    setupContextMenus();
 });
 
-// Alarm Handler (Auto Backup)
+function setupContextMenus() {
+    // 1. Current Tab
+    browser.contextMenus.create({
+        id: CM_IDS.SAVE_CURRENT,
+        title: "Send Current Tab",
+        contexts: ["page", "tab"]
+    });
+
+    // 2. Selected Tabs (Highlighted)
+    browser.contextMenus.create({
+        id: CM_IDS.SAVE_SELECTED,
+        title: "Send Selected Tabs",
+        contexts: ["page", "tab"]
+    });
+
+    // Separator
+    browser.contextMenus.create({
+        id: "sep-1",
+        type: "separator",
+        contexts: ["page", "tab"]
+    });
+
+    // 3. Workspace (Visible tabs in current window)
+    browser.contextMenus.create({
+        id: CM_IDS.SAVE_WORKSPACE,
+        title: "Send Current Workspace (Visible)",
+        contexts: ["page", "tab"]
+    });
+    
+    // 4. All Tabs (In current window)
+    browser.contextMenus.create({
+        id: CM_IDS.SAVE_ALL,
+        title: "Send All Tabs (Window)",
+        contexts: ["page", "tab"]
+    });
+
+    // Separator
+    browser.contextMenus.create({
+        id: "sep-2",
+        type: "separator",
+        contexts: ["page", "tab", "action"]
+    });
+
+    // 5. Dashboard
+    browser.contextMenus.create({
+        id: CM_IDS.OPEN_DASHBOARD,
+        title: "Open ZenTab Dashboard",
+        contexts: ["action", "page", "tab"]
+    });
+}
+
+// --- EVENT LISTENERS ---
+
+// Context Menus
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
+    switch (info.menuItemId) {
+        case CM_IDS.SAVE_CURRENT:
+            if (tab) executeAction({ idsToClose: [tab.id], tabsToSave: [tab] });
+            break;
+            
+        case CM_IDS.SAVE_SELECTED:
+            // Query for highlighted tabs in the current window
+            performQueryAndSave({ currentWindow: true, highlighted: true, pinned: false });
+            break;
+
+        case CM_IDS.SAVE_WORKSPACE:
+            // Workspace usually implies visible tabs (not hidden by other extensions)
+            performQueryAndSave({ currentWindow: true, hidden: false, pinned: false });
+            break;
+
+        case CM_IDS.SAVE_ALL:
+            // Everything in window, regardless of hidden status
+            performQueryAndSave({ currentWindow: true, pinned: false });
+            break;
+
+        case CM_IDS.OPEN_DASHBOARD:
+            browser.runtime.openOptionsPage();
+            break;
+    }
+});
+
+// Keyboard Commands
+browser.commands.onCommand.addListener((command) => {
+    if (command === COMMANDS.SAVE_SELECTED) {
+        performQueryAndSave({ currentWindow: true, highlighted: true, pinned: false });
+    } else if (command === COMMANDS.SAVE_ALL) {
+        performQueryAndSave({ currentWindow: true, pinned: false });
+    }
+});
+
+// Toolbar Click
+browser.action.onClicked.addListener(() => {
+    browser.runtime.openOptionsPage(); 
+});
+
+// Alarm Handler
 browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === BACKUP_CONFIG.ALARM_NAME) {
-        console.log("ZenTab: Alarm triggered backup.");
         await performFileBackup();
     }
 });
@@ -39,13 +133,32 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ status: "error", message: err.toString() });
         }
     })();
-    return true; // Async response
+    return true;
 });
+
+// --- HELPER FUNCTIONS ---
+
+async function performQueryAndSave(query) {
+    try {
+        const result = await tabManager.getTabsForAction(query);
+        await executeAction(result);
+    } catch (e) {
+        console.error("ZenTab: Command failed", e);
+    }
+}
+
+async function executeAction(result) {
+    if (result.tabsToSave.length > 0) {
+        await tabManager.saveTabGroup(result.tabsToSave);
+        if (result.idsToClose && result.idsToClose.length > 0) {
+            await browser.tabs.remove(result.idsToClose);
+        }
+    }
+}
 
 async function handleSaveTabs(tabs) {
     try {
         await tabManager.saveTabGroup(tabs);
-        await browser.runtime.openOptionsPage();
     } catch (error) {
         console.error("ZenTab Error: Failed to save tabs", error);
     }
@@ -59,7 +172,6 @@ async function scheduleBackupAlarm() {
 
     if (enabled && intervalValue > 0) {
         let periodInMinutes = 60; 
-        
         if (intervalUnit === 'hours') periodInMinutes = intervalValue * 60;
         if (intervalUnit === 'days') periodInMinutes = intervalValue * 60 * 24;
         if (intervalUnit === 'weeks') periodInMinutes = intervalValue * 60 * 24 * 7;
@@ -67,23 +179,12 @@ async function scheduleBackupAlarm() {
         browser.alarms.create(BACKUP_CONFIG.ALARM_NAME, {
             periodInMinutes: periodInMinutes
         });
-        console.log(`ZenTab: Backup scheduled every ${periodInMinutes} minutes.`);
-    } else {
-        console.log("ZenTab: Auto-backup disabled.");
     }
 }
 
-/**
- * Generates and downloads the backup file.
- * Requires "downloads" permission.
- */
 async function performFileBackup() {
     try {
-        console.log("ZenTab: Performing file backup...");
-        
-        // Delegate data creation to the manager
         const backupData = await backupManager.createBackupData();
-
         const jsonStr = JSON.stringify(backupData, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -92,14 +193,11 @@ async function performFileBackup() {
         await browser.downloads.download({
             url: url,
             filename: filename,
-            saveAs: false // Auto save without prompting
+            saveAs: false
         });
-
-        console.log("ZenTab: Backup downloaded: " + filename);
     } catch (e) {
         console.error("ZenTab: Backup failed", e);
     }
 }
 
-// Initial check on load
 scheduleBackupAlarm();

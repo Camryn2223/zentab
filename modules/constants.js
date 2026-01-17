@@ -19,6 +19,19 @@ export const MESSAGES = {
     PERFORM_BACKUP: 'performBackup'
 };
 
+export const CM_IDS = {
+    SAVE_CURRENT: 'cm-save-current',
+    SAVE_SELECTED: 'cm-save-selected',
+    SAVE_WORKSPACE: 'cm-save-workspace',
+    SAVE_ALL: 'cm-save-all',
+    OPEN_DASHBOARD: 'cm-open-dashboard'
+};
+
+export const COMMANDS = {
+    SAVE_SELECTED: 'save-selected',
+    SAVE_ALL: 'save-all'
+};
+
 export const DEFAULTS = {
     FILTER_MODE: MODES.BLACKLIST,
     BLACKLIST: [],
@@ -38,6 +51,6 @@ export const DEFAULTS = {
 };
 
 export const BACKUP_CONFIG = {
-    VERSION: '1.2.0',
+    VERSION: '1.3.0',
     ALARM_NAME: 'zentab-auto-backup'
 };

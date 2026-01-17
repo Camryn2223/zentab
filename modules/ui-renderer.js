@@ -19,12 +19,6 @@ export class UIRenderer {
         return item;
     }
 
-    /**
-     * Creates the DOM element for a tab group.
-     * @param {Object} group Data
-     * @param {Object} actions { onRestore, onRestoreWin, onDelete, onPin, onTabClick }
-     * @param {Object} config { showFavicons: boolean }
-     */
     static createTabGroupElement(group, actions, config = { showFavicons: true }) {
         const groupDiv = document.createElement('div');
         groupDiv.className = `group ${group.pinned ? 'pinned' : ''}`;
@@ -125,7 +119,6 @@ export class UIRenderer {
             link.className = 'tab-link';
             link.href = tab.url;
             
-            // Delegate click to controller to handle "Consume on Open" logic
             link.onclick = (e) => {
                 e.preventDefault();
                 actions.onTabClick(group.id, index, tab);
@@ -169,5 +162,45 @@ export class UIRenderer {
 
     static updateEmptyState(container, message) {
         container.innerHTML = `<div class="empty-msg">${message}</div>`;
+    }
+
+    /**
+     * Shows a toast notification at the bottom of the screen.
+     * @param {string} message 
+     * @param {string|null} actionLabel 
+     * @param {Function|null} onAction 
+     * @param {number} duration 
+     */
+    static showToast(message, actionLabel = null, onAction = null, duration = 4000) {
+        const existing = document.getElementById('zentab-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'zentab-toast';
+        toast.className = 'toast-notification';
+        
+        const msgSpan = document.createElement('span');
+        msgSpan.innerText = message;
+        toast.appendChild(msgSpan);
+
+        if (actionLabel && onAction) {
+            const btn = document.createElement('button');
+            btn.className = 'toast-action-btn';
+            btn.innerText = actionLabel;
+            btn.onclick = () => {
+                onAction();
+                toast.remove();
+            };
+            toast.appendChild(btn);
+        }
+
+        document.body.appendChild(toast);
+
+        // Animation
+        setTimeout(() => toast.classList.add('visible'), 10);
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     }
 }

@@ -80,7 +80,7 @@ body {
 
 h1 { color: var(--text-primary); margin: 0; font-size: 1.8rem; }
 h3 { margin: 0 0 15px 0; color: var(--accent-blue); font-size: 1.1rem; }
-p { margin: 0; } /* Reset default P margins to be explicit */
+p { margin: 0; }
 
 /* DASHBOARD STYLES */
 .btn-delete-all {
@@ -166,7 +166,7 @@ p { margin: 0; } /* Reset default P margins to be explicit */
 .right-col {
     display: flex;
     flex-direction: column;
-    gap: 20px; /* Tighter gap between cards in column */
+    gap: 20px; 
 }
 
 /* SETTINGS CARD STYLING */
@@ -177,10 +177,9 @@ p { margin: 0; } /* Reset default P margins to be explicit */
     height: fit-content;
     display: flex;
     flex-direction: column;
-    gap: 15px; /* Consistent internal spacing */
+    gap: 15px; 
 }
 
-/* Settings Groups (Row + Hint) */
 .setting-group {
     display: flex;
     flex-direction: column;
@@ -191,7 +190,6 @@ p { margin: 0; } /* Reset default P margins to be explicit */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    /* padding: 0; Removed vertical padding as gap handles spacing now */
 }
 
 .setting-row label {
@@ -204,7 +202,7 @@ p { margin: 0; } /* Reset default P margins to be explicit */
     font-size: 0.85em;
     color: var(--text-secondary);
     line-height: 1.4;
-    padding-right: 20px; /* Prevent wide text */
+    padding-right: 20px; 
 }
 
 .divider {
@@ -267,3 +265,41 @@ input[type="checkbox"] {
 
 .input-group { display: flex; gap: 10px; margin-top: 8px; }
 .small { width: 80px; }
+
+/* TOAST NOTIFICATION */
+.toast-notification {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--accent-blue);
+    padding: 12px 24px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+    opacity: 0;
+    z-index: 1000;
+}
+
+.toast-notification.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.toast-action-btn {
+    background-color: var(--accent-blue);
+    color: var(--bg-base);
+    border: none;
+    padding: 6px 12px;
+    font-size: 0.85em;
+    cursor: pointer;
+    border-radius: 4px;
+}
+.toast-action-btn:hover {
+    background-color: var(--accent-mauve);
+}

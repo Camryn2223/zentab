@@ -14,8 +14,11 @@ async function initPopup() {
 
 function setupEventListeners() {
     // Tab Actions
+    // 1. Workspace (Visible tabs)
     bindAction('send-workspace', { currentWindow: true, hidden: false, pinned: false });
+    // 2. Selected (Highlighted)
     bindAction('send-selected', { currentWindow: true, highlighted: true, pinned: false });
+    // 3. All (Window)
     bindAction('send-all', { currentWindow: true, pinned: false });
 
     // Navigation
@@ -50,6 +53,8 @@ async function loadInitialState() {
 
     if (currentHostname) {
         renderFilterButton(settings);
+    } else {
+        document.getElementById('toggle-filter').style.display = 'none';
     }
 }
 
@@ -90,24 +95,25 @@ function renderFilterButton(settings) {
     const { mode, blacklist, whitelist } = settings;
     
     btn.style.display = 'inline-block';
+    btn.classList.remove('status-loading', 'bl-add', 'bl-remove', 'wl-add', 'wl-remove');
     
     const list = mode === MODES.BLACKLIST ? blacklist : whitelist;
     const isInList = list.includes(currentHostname);
 
     const states = {
         [MODES.BLACKLIST]: {
-            added: { text: `Un-blacklist ${currentHostname}`, cls: 'btn-action-link bl-remove', title: "Allow this site" },
-            removed: { text: `Blacklist ${currentHostname}`, cls: 'btn-action-link bl-add', title: "Block this site" }
+            added: { text: `Un-block ${currentHostname}`, cls: 'bl-remove', title: "Allow this site" },
+            removed: { text: `Block ${currentHostname}`, cls: 'bl-add', title: "Block this site" }
         },
         [MODES.WHITELIST]: {
-            added: { text: `Un-whitelist ${currentHostname}`, cls: 'btn-action-link wl-remove', title: "Block this site" },
-            removed: { text: `Whitelist ${currentHostname}`, cls: 'btn-action-link wl-add', title: "Allow this site" }
+            added: { text: `Remove ${currentHostname}`, cls: 'wl-remove', title: "Block this site" },
+            removed: { text: `Allow ${currentHostname}`, cls: 'wl-add', title: "Allow this site" }
         }
     };
 
     const state = isInList ? states[mode].added : states[mode].removed;
     
     btn.innerText = state.text;
-    btn.className = state.cls;
+    btn.classList.add('btn-pill', state.cls);
     btn.title = state.title;
 }
