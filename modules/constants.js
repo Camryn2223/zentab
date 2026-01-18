@@ -52,6 +52,6 @@ export const DEFAULTS = {
 };
 
 export const BACKUP_CONFIG = {
-    VERSION: '1.3.0',
+    VERSION: '1.0.2',
     ALARM_NAME: 'zentab-auto-backup'
 };
