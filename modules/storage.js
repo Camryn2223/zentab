@@ -19,7 +19,8 @@ class StorageService {
             STORAGE_KEYS.BLACKLIST,
             STORAGE_KEYS.WHITELIST,
             STORAGE_KEYS.GENERAL_SETTINGS,
-            STORAGE_KEYS.BACKUP_SETTINGS
+            STORAGE_KEYS.BACKUP_SETTINGS,
+            STORAGE_KEYS.LAST_BACKUP
         ]);
 
         return {
@@ -27,7 +28,8 @@ class StorageService {
             blacklist: data[STORAGE_KEYS.BLACKLIST] || DEFAULTS.BLACKLIST,
             whitelist: data[STORAGE_KEYS.WHITELIST] || DEFAULTS.WHITELIST,
             general: { ...DEFAULTS.GENERAL_SETTINGS, ...data[STORAGE_KEYS.GENERAL_SETTINGS] },
-            backup: { ...DEFAULTS.BACKUP_SETTINGS, ...data[STORAGE_KEYS.BACKUP_SETTINGS] }
+            backup: { ...DEFAULTS.BACKUP_SETTINGS, ...data[STORAGE_KEYS.BACKUP_SETTINGS] },
+            lastBackup: data[STORAGE_KEYS.LAST_BACKUP] || DEFAULTS.LAST_BACKUP
         };
     }
 

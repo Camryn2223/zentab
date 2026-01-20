@@ -1,6 +1,6 @@
 import { storageService } from './storage.js';
 import { settingsManager } from './settings-manager.js';
-import { BACKUP_CONFIG } from './constants.js';
+import { BACKUP_CONFIG, STORAGE_KEYS } from './constants.js';
 
 class BackupManager {
 
@@ -22,6 +22,13 @@ class BackupManager {
                 mode: settings.mode
             }
         };
+    }
+
+    /**
+     * Updates the last backup timestamp in storage.
+     */
+    async updateLastBackupTimestamp() {
+        await storageService.set({ [STORAGE_KEYS.LAST_BACKUP]: new Date().toISOString() });
     }
 
     /**

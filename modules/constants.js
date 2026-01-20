@@ -4,7 +4,8 @@ export const STORAGE_KEYS = {
     BLACKLIST: 'blacklistedDomains',
     WHITELIST: 'whitelistedDomains',
     GENERAL_SETTINGS: 'generalSettings',
-    BACKUP_SETTINGS: 'backupSettings'
+    BACKUP_SETTINGS: 'backupSettings',
+    LAST_BACKUP: 'lastBackupTimestamp'
 };
 
 export const MODES = {
@@ -48,10 +49,11 @@ export const DEFAULTS = {
         enabled: false,
         intervalValue: 1,
         intervalUnit: 'days',
-    }
+    },
+    LAST_BACKUP: null
 };
 
 export const BACKUP_CONFIG = {
-    VERSION: '1.0.2',
+    VERSION: '1.0.3',
     ALARM_NAME: 'zentab-auto-backup'
 };

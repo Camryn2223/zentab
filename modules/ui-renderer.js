@@ -164,6 +164,15 @@ export class UIRenderer {
         ]);
     }
 
+    static updateEmptyState(container, message) {
+        container.innerHTML = '';
+        container.appendChild(createElement('div', { 
+            className: 'empty-msg', 
+            text: message,
+            style: { padding: '10px', fontSize: '0.9em' }
+        }));
+    }
+
     // --- UTILS ---
 
     static showToast(message, actionLabel = null, onAction = null, duration = 4000) {

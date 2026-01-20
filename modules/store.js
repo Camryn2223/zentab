@@ -1,6 +1,7 @@
 import { storageService } from './storage.js';
 import { settingsManager } from './settings-manager.js';
 import { tabManager } from './tab-manager.js';
+import { STORAGE_KEYS } from './constants.js';
 
 /**
  * Centralized State Management (Observer Pattern).
@@ -15,6 +16,39 @@ class Store extends EventTarget {
             filter: '', // Search filter
             loading: true
         };
+
+        // Reactive: Listen for storage changes from background script or other contexts
+        browser.storage.onChanged.addListener((changes, area) => {
+            if (area === 'local') {
+                this.handleStorageChange(changes);
+            }
+        });
+    }
+
+    /**
+     * Reacts to storage changes to keep UI in sync across windows/background
+     * @param {Object} changes 
+     */
+    handleStorageChange(changes) {
+        // 1. Refresh Groups if changed
+        if (changes[STORAGE_KEYS.TAB_GROUPS]) {
+            this.refreshGroups();
+        }
+
+        // 2. Refresh Settings if any setting key changed
+        // This includes LAST_BACKUP, which fixes the UI update issue
+        const settingKeys = [
+            STORAGE_KEYS.FILTER_MODE,
+            STORAGE_KEYS.BLACKLIST,
+            STORAGE_KEYS.WHITELIST,
+            STORAGE_KEYS.GENERAL_SETTINGS,
+            STORAGE_KEYS.BACKUP_SETTINGS,
+            STORAGE_KEYS.LAST_BACKUP
+        ];
+
+        if (settingKeys.some(key => changes[key])) {
+            this.refreshSettings();
+        }
     }
 
     /**
@@ -95,6 +129,7 @@ class Store extends EventTarget {
     async restoreGroup(deletedGroup) {
         if (!deletedGroup) return;
         await tabManager.saveTabGroup(deletedGroup);
+        // refreshGroups handled by storage listener, but calling it here ensures quick feedback
         await this.refreshGroups();
     }
 
@@ -106,7 +141,7 @@ class Store extends EventTarget {
 
     async togglePin(id) {
         await tabManager.togglePin(id);
-        await this.refreshGroups();
+        // refreshGroups handled by storage listener
     }
 
     async removeTab(groupId, tabIndex) {

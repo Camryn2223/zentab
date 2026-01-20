@@ -6,9 +6,17 @@ import { MESSAGES, BACKUP_CONFIG, CM_IDS, COMMANDS } from './modules/constants.j
 console.log("ZenTab: Background script started.");
 
 // --- INITIALIZATION ---
+
+// Runs when extension is installed or updated
 browser.runtime.onInstalled.addListener(async () => {
     await setupContextMenus();
-    await scheduleBackupAlarm(); // Ensure alarm is set on install/update
+    await scheduleBackupAlarm(); // Initialize the schedule
+    await checkAndRunMissedBackup(); // Check if we missed a backup during update/install process
+});
+
+// Runs when the browser starts up (profile loaded)
+browser.runtime.onStartup.addListener(async () => {
+    await checkAndRunMissedBackup();
 });
 
 async function setupContextMenus() {
@@ -129,11 +137,51 @@ async function executeAction(result) {
     }
 }
 
+/**
+ * Checks if the configured backup interval has passed since the last backup.
+ * If yes, runs a backup immediately and resets the periodic alarm.
+ */
+async function checkAndRunMissedBackup() {
+    try {
+        const settings = await settingsManager.getSettings();
+        const { enabled, intervalValue, intervalUnit } = settings.backup;
+
+        if (!enabled) return;
+
+        // Calculate required interval in Milliseconds
+        let periodInMinutes = 60;
+        if (intervalUnit === 'hours') periodInMinutes = intervalValue * 60;
+        if (intervalUnit === 'days') periodInMinutes = intervalValue * 60 * 24;
+        if (intervalUnit === 'weeks') periodInMinutes = intervalValue * 60 * 24 * 7;
+        
+        const intervalMs = periodInMinutes * 60 * 1000;
+        const lastBackupTime = settings.lastBackup ? new Date(settings.lastBackup).getTime() : 0;
+        const now = Date.now();
+
+        // If lastBackupTime is 0, it's likely a fresh install, so we adhere to the standard schedule.
+        // If lastBackupTime > 0, we check if we missed the window.
+        if (lastBackupTime > 0 && (now - lastBackupTime) > intervalMs) {
+            console.log(`ZenTab: Missed backup detected (Overdue by ${((now - lastBackupTime) - intervalMs) / 1000}s). Running catch-up...`);
+            
+            // 1. Reset the schedule FIRST.
+            // This ensures that when the backup finishes and triggers a UI update,
+            // the new alarm time is already established.
+            await scheduleBackupAlarm(); 
+
+            // 2. Run the backup
+            await performFileBackup();
+        }
+    } catch (e) {
+        console.error("ZenTab: Error checking missed backups", e);
+    }
+}
+
 async function scheduleBackupAlarm() {
     try {
         const settings = await settingsManager.getSettings();
         const { enabled, intervalValue, intervalUnit } = settings.backup;
 
+        // Always clear existing first to reset the timer logic
         await browser.alarms.clear(BACKUP_CONFIG.ALARM_NAME);
 
         if (enabled && intervalValue > 0) {
@@ -146,6 +194,8 @@ async function scheduleBackupAlarm() {
                 periodInMinutes: periodInMinutes
             });
             console.log(`ZenTab: Backup scheduled every ${periodInMinutes} minutes.`);
+        } else {
+            console.log("ZenTab: Auto-backup disabled or invalid interval.");
         }
     } catch (e) {
         console.error("ZenTab: Failed to schedule backup", e);
@@ -165,6 +215,11 @@ async function performFileBackup() {
             filename: filename,
             saveAs: false // Auto-save to default folder
         });
+
+        // Update timestamp after success
+        // This triggers the browser.storage.onChanged event which updates the UI
+        await backupManager.updateLastBackupTimestamp();
+        
         console.log("ZenTab: Backup completed.");
     } catch (e) {
         console.error("ZenTab: Backup generation failed", e);

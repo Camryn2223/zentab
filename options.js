@@ -4,7 +4,7 @@ import { backupManager } from './modules/backup-manager.js';
 import { UIRenderer } from './modules/ui-renderer.js';
 import { store } from './modules/store.js';
 import { DragManager } from './modules/drag-manager.js'; 
-import { MODES, MESSAGES } from './modules/constants.js';
+import { MODES, MESSAGES, BACKUP_CONFIG } from './modules/constants.js';
 import { debounce } from './modules/utils.js';
 
 class OptionsController {
@@ -42,12 +42,20 @@ class OptionsController {
         if (state.loading) return; 
 
         // 1. Dashboard Render
-        const container = document.getElementById('container');
-        const groupsToRender = store.getFilteredGroups();
-        UIRenderer.renderDashboard(container, groupsToRender, state.settings);
+        try {
+            const container = document.getElementById('container');
+            const groupsToRender = store.getFilteredGroups();
+            UIRenderer.renderDashboard(container, groupsToRender, state.settings);
+        } catch (e) {
+            console.error("Dashboard render error:", e);
+        }
 
         // 2. Settings Render (Sync UI with State)
-        this.updateSettingsUI(state.settings);
+        try {
+            this.updateSettingsUI(state.settings);
+        } catch (e) {
+            console.error("Settings render error:", e);
+        }
     }
 
     // --- EVENT DELEGATION ---
@@ -169,7 +177,7 @@ class OptionsController {
         };
 
         setCheck('setting-favicons', settings.general.showFavicons);
-        setCheck('setting-focus', settings.general.focusOnOpen); // NEW
+        setCheck('setting-focus', settings.general.focusOnOpen);
         setCheck('setting-consume', settings.general.consumeOnOpen);
         setCheck('setting-dedupe', settings.general.autoDeduplicate);
         
@@ -190,6 +198,28 @@ class OptionsController {
 
         // Render Domains List
         this.renderDomainList(settings);
+
+        // Update Timestamps
+        this.updateBackupStatusUI(settings.lastBackup);
+    }
+
+    async updateBackupStatusUI(lastBackup) {
+        const lastEl = document.getElementById('backup-last-time');
+        const nextEl = document.getElementById('backup-next-time');
+        
+        if (lastEl) lastEl.innerText = lastBackup ? new Date(lastBackup).toLocaleString() : 'Never';
+        
+        if (nextEl) {
+            try {
+                const alarm = await browser.alarms.get(BACKUP_CONFIG.ALARM_NAME);
+                nextEl.innerText = alarm 
+                    ? new Date(alarm.scheduledTime).toLocaleString() 
+                    : 'Not scheduled';
+            } catch (e) {
+                console.warn("Failed to retrieve alarm status:", e);
+                nextEl.innerText = 'Error checking schedule';
+            }
+        }
     }
 
     renderDomainList(settings) {
@@ -234,7 +264,7 @@ class OptionsController {
             });
         };
         bindToggle('setting-favicons', 'showFavicons');
-        bindToggle('setting-focus', 'focusOnOpen'); // NEW
+        bindToggle('setting-focus', 'focusOnOpen');
         bindToggle('setting-consume', 'consumeOnOpen');
         bindToggle('setting-dedupe', 'autoDeduplicate');
 
@@ -279,6 +309,8 @@ class OptionsController {
         document.getElementById('btn-export-now').addEventListener('click', async () => {
             try {
                 await browser.runtime.sendMessage({ action: MESSAGES.PERFORM_BACKUP });
+                // We don't refresh immediately because the bg script updates storage async.
+                // But the user will likely see the file download.
             } catch (e) { alert("Backup failed. Extension context invalidated?"); }
         });
 
@@ -301,13 +333,23 @@ class OptionsController {
 
         // Save Config
         const saveConfig = async () => {
+            // 1. Save local settings first
             await settingsManager.saveBackupConfig({
                 enabled: document.getElementById('backup-enabled').checked,
                 intervalValue: parseFloat(document.getElementById('backup-val').value) || 1,
                 intervalUnit: document.getElementById('backup-unit').value
             });
+
+            // 2. Schedule the alarm via Background Script.
+            // WE MUST AWAIT THIS: The background script creates the alarm.
+            try {
+                await browser.runtime.sendMessage({ action: MESSAGES.SCHEDULE_BACKUP });
+            } catch (e) {
+                console.warn("Could not schedule backup (background context invalid?):", e);
+            }
+
+            // 3. Now refresh UI (which queries existing alarms)
             await store.refreshSettings();
-            browser.runtime.sendMessage({ action: MESSAGES.SCHEDULE_BACKUP }).catch(() => {});
         };
 
         ['backup-enabled', 'backup-val', 'backup-unit'].forEach(id => {
