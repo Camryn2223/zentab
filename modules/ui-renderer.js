@@ -114,8 +114,12 @@ export class UIRenderer {
             }
         });
 
-        group.tabs.forEach((tab, index) => {
+        group.tabs.forEach((tab, i) => {
             const children = [];
+            
+            // If the tab object has an 'originalIndex' property (from search filtering), use it.
+            // Otherwise use the loop index (standard view).
+            const realIndex = tab.originalIndex !== undefined ? tab.originalIndex : i;
 
             // Favicon
             if (settings.general.showFavicons) {
@@ -141,7 +145,7 @@ export class UIRenderer {
                     action: 'open-tab', 
                     id: group.id, 
                     url: tab.url,
-                    index: index,
+                    index: realIndex,
                     type: 'tab' // Important for DnD
                 }
             }, children);

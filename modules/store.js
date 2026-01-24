@@ -93,14 +93,35 @@ class Store extends EventTarget {
         if (!this.state.filter) return this.state.groups;
         
         const term = this.state.filter.toLowerCase();
-        return this.state.groups.filter(group => {
-            const titleMatch = (group.customTitle || '').toLowerCase().includes(term);
-            const tabMatch = group.tabs.some(tab =>
-                tab.title.toLowerCase().includes(term) ||
-                tab.url.toLowerCase().includes(term)
-            );
-            return titleMatch || tabMatch;
-        });
+        
+        return this.state.groups
+            .map(group => {
+                // 1. If Group Title matches, return the whole group (showing context)
+                // We return the original object so UIRenderer uses standard indices
+                if ((group.customTitle || '').toLowerCase().includes(term)) {
+                    return group;
+                }
+
+                // 2. If Group Title does NOT match, search specific tabs
+                // We must attach the original index to ensure actions (delete/open) target the correct tab
+                const matchingTabs = group.tabs
+                    .map((tab, index) => ({ ...tab, originalIndex: index })) 
+                    .filter(tab => 
+                        (tab.title || '').toLowerCase().includes(term) ||
+                        (tab.url || '').toLowerCase().includes(term)
+                    );
+
+                // If we have matching tabs, return a NEW group object with just those tabs
+                if (matchingTabs.length > 0) {
+                    return {
+                        ...group,
+                        tabs: matchingTabs
+                    };
+                }
+
+                return null;
+            })
+            .filter(group => group !== null);
     }
 
     async refreshGroups() {
@@ -150,6 +171,8 @@ class Store extends EventTarget {
         // Optimistic update
         const group = this.state.groups.find(g => g.id === Number(groupId));
         if (group) {
+            // Note: If we are in a filtered view, tabIndex passed here MUST be the original index.
+            // The UIRenderer handles passing the correct index via dataset.
             group.tabs.splice(tabIndex, 1);
             if (group.tabs.length === 0 && !group.pinned) {
                 this.state.groups = this.state.groups.filter(g => g.id !== Number(groupId));

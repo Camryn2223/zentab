@@ -16,6 +16,13 @@ export class DragManager {
     }
 
     handleDragStart(e) {
+        // Disable drag and drop when a search filter is active
+        // because indices in the view do not match the storage model.
+        if (store.state.filter) {
+            e.preventDefault();
+            return;
+        }
+
         const target = e.target;
         
         // Determine if Group or Tab
@@ -40,6 +47,8 @@ export class DragManager {
     }
 
     handleDragOver(e) {
+        if (!this.draggedType) return;
+        
         e.preventDefault(); // Necessary to allow dropping
 
         const container = document.getElementById('container');
