@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZenTab",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A OneTab alternative made for the Zen browser.",
   "permissions": [
     "tabs",
@@ -12,8 +12,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Send Tabs to ZenTab",
+    "default_title": "ZenTab",
     "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png",
+    "96": "icon.png"
   },
   "background": {
     "scripts": ["background.js"],
